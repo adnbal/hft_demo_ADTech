@@ -29,8 +29,10 @@ if "pnl" not in st.session_state:
     st.session_state.pnl = 0.0
 if "pending_order" not in st.session_state:
     st.session_state.pending_order = None
+if "dummy_counter" not in st.session_state:
+    st.session_state.dummy_counter = 0
 
-# ✅ WebSocket URLs for Binance Testnet
+# ✅ Binance Testnet WebSocket URLs
 TRADE_WS = "wss://testnet.binance.vision/ws/btcusdt@trade"
 DEPTH_WS = "wss://testnet.binance.vision/ws/btcusdt@depth5@100ms"
 
@@ -52,14 +54,20 @@ def start_ws():
     threading.Thread(target=ws_trade.run_forever, daemon=True).start()
     threading.Thread(target=ws_depth.run_forever, daemon=True).start()
 
-if "ws_started" not in st.session_state:
-    start_ws()
+# ✅ Start WebSocket only once
+if "ws_started" not in st.session_state or not st.session_state.ws_started:
+    threading.Thread(target=start_ws, daemon=True).start()
     st.session_state.ws_started = True
 
 # ✅ Market-Making Simulation
 def market_maker():
     if len(st.session_state.price_data) < 1:
+        st.session_state.dummy_counter += 1
+        # After 10 seconds (~5 refresh cycles), inject dummy price
+        if st.session_state.dummy_counter > 5:
+            st.session_state.price_data.append({"time": pd.Timestamp.now(), "price": 100000.0})
         return
+
     latest_price = st.session_state.price_data[-1]["price"]
     qty = 0.001
     bid_price = latest_price * 0.999
@@ -127,13 +135,13 @@ col1, col2 = st.columns(2)
 # ✅ Price Chart
 with col1:
     st.subheader("📈 Live BTC/USDT Price")
-    if len(st.session_state.price_data) > 5:
+    if len(st.session_state.price_data) > 0:
         df_price = pd.DataFrame(st.session_state.price_data[-100:])
         fig = go.Figure(go.Scatter(x=df_price["time"], y=df_price["price"], mode="lines+markers", line=dict(color="blue")))
         fig.update_layout(title="BTC/USDT Price", xaxis_title="Time", yaxis_title="Price")
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("⏳ Waiting for price data to stream in from Binance Testnet...")
+        st.info("⏳ Waiting for price data from Binance Testnet...")
 
 # ✅ Order Book Visualization
 with col2:
