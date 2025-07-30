@@ -6,19 +6,16 @@ import threading
 import websocket
 import plotly.graph_objects as go
 from streamlit_autorefresh import st_autorefresh
-import time
 
 # ✅ Page Config
 st.set_page_config(page_title="Advanced HFT Prototype", layout="wide")
 st.title("⚡ Advanced High-Frequency Trading Prototype (Binance Testnet)")
 
-# ✅ Sidebar Controls
+# ✅ Sidebar Settings
 st.sidebar.header("⚙️ Settings")
 refresh_interval = st.sidebar.slider("Refresh Interval (seconds)", 1, 5, 2)
-mode = st.sidebar.radio("Mode", ["Simulation", "Live Testnet (Fake Money)"])
-st.sidebar.info("Live Testnet mode requires API keys in Streamlit secrets.")
 
-# ✅ Auto-refresh UI
+# ✅ Auto-refresh
 st_autorefresh(interval=refresh_interval * 1000, key="refresh")
 
 # ✅ Initialize Session State
@@ -30,8 +27,10 @@ if "trade_log" not in st.session_state:
     st.session_state.trade_log = []
 if "pnl" not in st.session_state:
     st.session_state.pnl = 0.0
+if "pending_order" not in st.session_state:
+    st.session_state.pending_order = None
 
-# ✅ Binance Testnet WebSocket URLs
+# ✅ WebSocket URLs for Binance Testnet
 TRADE_WS = "wss://testnet.binance.vision/ws/btcusdt@trade"
 DEPTH_WS = "wss://testnet.binance.vision/ws/btcusdt@depth5@100ms"
 
@@ -56,12 +55,11 @@ def start_ws():
     ws_depth = websocket.WebSocketApp(DEPTH_WS, on_message=on_depth)
     threading.Thread(target=ws_depth.run_forever, daemon=True).start()
 
-# ✅ Start WebSocket once
 if "ws_started" not in st.session_state:
     start_ws()
     st.session_state.ws_started = True
 
-# ✅ Market-Making Simulation Logic
+# ✅ Market-Making Simulation
 def market_maker():
     if len(st.session_state.price_data) < 1:
         return
@@ -86,6 +84,44 @@ def market_maker():
         st.session_state.trade_log.append(t)
 
 market_maker()
+
+# ✅ Dummy Order Feature
+st.sidebar.subheader("🛒 Place Dummy Order")
+order_type = st.sidebar.selectbox("Order Type", ["BUY", "SELL"])
+preferred_price = st.sidebar.number_input("Preferred Price (USDT)", min_value=10000.0, value=100000.0)
+order_qty = st.sidebar.number_input("Order Quantity (BTC)", min_value=0.0001, value=0.001)
+
+if st.sidebar.button("Submit Order"):
+    st.session_state.pending_order = {
+        "type": order_type,
+        "price": preferred_price,
+        "qty": order_qty,
+        "status": "OPEN",
+        "time": pd.Timestamp.now()
+    }
+    st.sidebar.success(f"Order placed: {order_type} {order_qty} BTC at {preferred_price} USDT")
+
+# ✅ Check if Dummy Order Can Execute
+if st.session_state.pending_order and st.session_state.pending_order["status"] == "OPEN":
+    latest_price = st.session_state.price_data[-1]["price"] if st.session_state.price_data else None
+    if latest_price:
+        if (st.session_state.pending_order["type"] == "BUY" and latest_price <= st.session_state.pending_order["price"]) or \
+           (st.session_state.pending_order["type"] == "SELL" and latest_price >= st.session_state.pending_order["price"]):
+
+            # Execute Order
+            executed_order = st.session_state.pending_order
+            executed_order["status"] = "FILLED"
+            executed_order["execution_price"] = latest_price
+            st.session_state.trade_log.append(executed_order)
+
+            # Update P&L
+            if executed_order["type"] == "BUY":
+                st.session_state.pnl -= latest_price * executed_order["qty"]
+            else:
+                st.session_state.pnl += latest_price * executed_order["qty"]
+
+            st.sidebar.success(f"✅ Order executed at {latest_price} USDT")
+            st.session_state.pending_order = None
 
 # ✅ UI Layout
 col1, col2 = st.columns(2)
