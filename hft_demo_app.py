@@ -6,6 +6,7 @@ import threading
 import websocket
 import plotly.graph_objects as go
 from streamlit_autorefresh import st_autorefresh
+import time
 
 # ✅ Page Config
 st.set_page_config(page_title="Advanced HFT Prototype", layout="wide")
@@ -15,7 +16,7 @@ st.title("⚡ Advanced High-Frequency Trading Prototype (Binance Testnet)")
 st.sidebar.header("⚙️ Settings")
 refresh_interval = st.sidebar.slider("Refresh Interval (seconds)", 1, 5, 2)
 
-# ✅ Auto-refresh for Streamlit Cloud
+# ✅ Auto-refresh for UI updates
 st_autorefresh(interval=refresh_interval * 1000, key="refresh")
 
 # ✅ Initialize Session State
@@ -29,8 +30,8 @@ if "pnl" not in st.session_state:
     st.session_state.pnl = 0.0
 if "pending_order" not in st.session_state:
     st.session_state.pending_order = None
-if "dummy_counter" not in st.session_state:
-    st.session_state.dummy_counter = 0
+if "last_data_time" not in st.session_state:
+    st.session_state.last_data_time = time.time()
 
 # ✅ Binance Testnet WebSocket URLs
 TRADE_WS = "wss://testnet.binance.vision/ws/btcusdt@trade"
@@ -41,6 +42,7 @@ def on_trade(ws, message):
     data = json.loads(message)
     price = float(data['p'])
     st.session_state.price_data.append({"time": pd.Timestamp.now(), "price": price})
+    st.session_state.last_data_time = time.time()
 
 def on_depth(ws, message):
     data = json.loads(message)
@@ -49,22 +51,32 @@ def on_depth(ws, message):
     st.session_state.order_book = {"bids": bids, "asks": asks}
 
 def start_ws():
-    ws_trade = websocket.WebSocketApp(TRADE_WS, on_message=on_trade)
-    ws_depth = websocket.WebSocketApp(DEPTH_WS, on_message=on_depth)
-    threading.Thread(target=ws_trade.run_forever, daemon=True).start()
-    threading.Thread(target=ws_depth.run_forever, daemon=True).start()
+    try:
+        ws_trade = websocket.WebSocketApp(TRADE_WS, on_message=on_trade)
+        ws_depth = websocket.WebSocketApp(DEPTH_WS, on_message=on_depth)
+        threading.Thread(target=ws_trade.run_forever, daemon=True).start()
+        threading.Thread(target=ws_depth.run_forever, daemon=True).start()
+    except Exception as e:
+        print(f"WebSocket error: {e}")
 
-# ✅ Start WebSocket only once
-if "ws_started" not in st.session_state or not st.session_state.ws_started:
-    threading.Thread(target=start_ws, daemon=True).start()
+# ✅ Reconnect if no data for 5 seconds
+if time.time() - st.session_state.last_data_time > 5:
+    st.sidebar.warning("Reconnecting WebSocket...")
+    start_ws()
+
+# ✅ Ensure WebSocket started
+if "ws_started" not in st.session_state:
+    start_ws()
     st.session_state.ws_started = True
 
 # ✅ Market-Making Simulation
 def market_maker():
     if len(st.session_state.price_data) < 1:
+        # Inject simulated price if no WebSocket data
+        if "dummy_counter" not in st.session_state:
+            st.session_state.dummy_counter = 0
         st.session_state.dummy_counter += 1
-        # After 10 seconds (~5 refresh cycles), inject dummy price
-        if st.session_state.dummy_counter > 5:
+        if st.session_state.dummy_counter > 3:
             st.session_state.price_data.append({"time": pd.Timestamp.now(), "price": 100000.0})
         return
 
