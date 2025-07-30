@@ -2,115 +2,75 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import requests
-import websocket
-import threading
 import json
 import time
 import plotly.express as px
+from websocket import create_connection
 
-# -------------------------------
 # Streamlit Page Config
-# -------------------------------
 st.set_page_config(page_title="HFT Prototype Demo", layout="wide")
 st.title("⚡ High-Frequency Trading Prototype (Binance Testnet)")
 
-# -------------------------------
-# Globals for Live Data
-# -------------------------------
-price_data = []
-trade_log = []
+# Sidebar Settings
+st.sidebar.header("⚙️ Settings")
+refresh_rate = st.sidebar.slider("Refresh Interval (seconds)", 1, 10, 3)
 
-# -------------------------------
-# Binance Testnet WebSocket URL
-# -------------------------------
-BINANCE_TESTNET_WS = "wss://testnet.binance.vision/ws/btcusdt@trade"
+# Initialize Session State
+if "price_data" not in st.session_state:
+    st.session_state.price_data = []
+if "trade_log" not in st.session_state:
+    st.session_state.trade_log = []
 
-# -------------------------------
-# Market Making Strategy
-# -------------------------------
+# Binance Testnet WebSocket (one-time fetch for simplicity)
+def fetch_price():
+    try:
+        ws = create_connection("wss://testnet.binance.vision/ws/btcusdt@trade")
+        message = json.loads(ws.recv())
+        ws.close()
+        return float(message["p"])
+    except Exception as e:
+        st.error(f"Error fetching price: {e}")
+        return None
+
+# Market-Making Strategy Simulation
 def market_maker_strategy(current_price):
-    """
-    Basic strategy:
-    - Buy 0.001 BTC if price dips slightly
-    - Sell 0.001 BTC if price rises slightly
-    """
     qty = 0.001
-    bid_price = current_price * 0.999  # Slightly below market
-    ask_price = current_price * 1.001  # Slightly above market
+    bid_price = current_price * 0.999
+    ask_price = current_price * 1.001
 
-    # Simulate execution
     buy_executed = np.random.choice([True, False], p=[0.3, 0.7])
     sell_executed = np.random.choice([True, False], p=[0.3, 0.7])
 
-    trade_details = []
+    trades = []
     if buy_executed:
-        trade_details.append({"type": "BUY", "price": round(bid_price, 2), "qty": qty})
+        trades.append({"type": "BUY", "price": round(bid_price, 2), "qty": qty})
     if sell_executed:
-        trade_details.append({"type": "SELL", "price": round(ask_price, 2), "qty": qty})
+        trades.append({"type": "SELL", "price": round(ask_price, 2), "qty": qty})
+    return trades
 
-    return trade_details
-
-# -------------------------------
-# WebSocket Listener
-# -------------------------------
-def on_message(ws, message):
-    global price_data, trade_log
-    msg = json.loads(message)
-    price = float(msg['p'])
-    timestamp = pd.Timestamp.now()
-
-    price_data.append({"time": timestamp, "price": price})
-
-    # Run strategy
+# Fetch Price and Update Data
+price = fetch_price()
+if price:
+    st.session_state.price_data.append({"time": pd.Timestamp.now(), "price": price})
     trades = market_maker_strategy(price)
     for t in trades:
-        trade_log.append({"time": timestamp, **t})
+        st.session_state.trade_log.append({"time": pd.Timestamp.now(), **t})
 
-def on_error(ws, error):
-    print("WebSocket Error:", error)
-
-def on_close(ws):
-    print("WebSocket Closed")
-
-def on_open(ws):
-    print("Connected to Binance Testnet WebSocket")
-
-# -------------------------------
-# Start WebSocket in a thread
-# -------------------------------
-def start_socket():
-    ws = websocket.WebSocketApp(BINANCE_TESTNET_WS,
-                                on_message=on_message,
-                                on_error=on_error,
-                                on_close=on_close)
-    ws.on_open = on_open
-    ws.run_forever()
-
-threading.Thread(target=start_socket, daemon=True).start()
-
-# -------------------------------
-# Streamlit Live Dashboard
-# -------------------------------
-st.sidebar.header("⚙️ Settings")
-refresh_rate = st.sidebar.slider("Refresh Interval (seconds)", 1, 10, 2)
-
+# Layout
 st.subheader("📈 Live Price Feed (BTC/USDT)")
-chart_placeholder = st.empty()
-log_placeholder = st.empty()
+if len(st.session_state.price_data) > 5:
+    df_price = pd.DataFrame(st.session_state.price_data[-100:])
+    fig = px.line(df_price, x="time", y="price", title="Live BTC/USDT Price")
+    st.plotly_chart(fig, use_container_width=True)
 
-while True:
-    if len(price_data) > 5:
-        df_price = pd.DataFrame(price_data[-100:])  # last 100 points
-        fig = px.line(df_price, x="time", y="price", title="Live BTC/USDT Price")
-        chart_placeholder.plotly_chart(fig, use_container_width=True)
+st.subheader("📜 Trade Log & Simulated P&L")
+if len(st.session_state.trade_log) > 0:
+    df_trades = pd.DataFrame(st.session_state.trade_log[-20:])
+    buy_sum = df_trades[df_trades["type"] == "BUY"]["price"].sum()
+    sell_sum = df_trades[df_trades["type"] == "SELL"]["price"].sum()
+    pnl = (sell_sum - buy_sum) * 0.001
+    st.metric("💰 Simulated P&L", f"{pnl:.2f} USDT")
+    st.dataframe(df_trades)
 
-    if len(trade_log) > 0:
-        df_trades = pd.DataFrame(trade_log[-20:])  # last 20 trades
-        # Calculate P&L (rough simulation)
-        buy_sum = df_trades[df_trades["type"] == "BUY"]["price"].sum()
-        sell_sum = df_trades[df_trades["type"] == "SELL"]["price"].sum()
-        pnl = (sell_sum - buy_sum) * 0.001  # Qty fixed at 0.001
-        log_placeholder.subheader(f"💰 Simulated P&L: {pnl:.2f} USDT")
-        st.dataframe(df_trades)
-
-    time.sleep(refresh_rate)
+# Auto-refresh every few seconds
+st.experimental_rerun() if st.sidebar.button("Refresh Now") else time.sleep(refresh_rate)
