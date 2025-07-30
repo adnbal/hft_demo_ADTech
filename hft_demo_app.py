@@ -5,24 +5,24 @@ import requests
 import plotly.express as px
 from streamlit_autorefresh import st_autorefresh
 
-# Streamlit Page Config
+# ✅ Page Config
 st.set_page_config(page_title="HFT Prototype Demo", layout="wide")
 st.title("⚡ High-Frequency Trading Prototype (Binance Testnet)")
 
-# Sidebar Settings
+# ✅ Sidebar Settings
 st.sidebar.header("⚙️ Settings")
 refresh_rate = st.sidebar.slider("Refresh Interval (seconds)", 1, 10, 3)
 
-# Enable auto-refresh
+# ✅ Auto-refresh setup
 st_autorefresh(interval=refresh_rate * 1000, key="refresh")
 
-# Initialize Session State
+# ✅ Initialize session state
 if "price_data" not in st.session_state:
     st.session_state.price_data = []
 if "trade_log" not in st.session_state:
     st.session_state.trade_log = []
 
-# Fetch Price from Binance Testnet REST API
+# ✅ Fetch price from Binance Testnet REST API
 def fetch_price():
     url = "https://testnet.binance.vision/api/v3/ticker/price?symbol=BTCUSDT"
     try:
@@ -33,7 +33,7 @@ def fetch_price():
         st.error(f"Error fetching price: {e}")
         return None
 
-# Simple Market-Making Strategy
+# ✅ Simple Market-Making Simulation
 def market_maker_strategy(current_price):
     qty = 0.001
     bid_price = current_price * 0.999
@@ -48,7 +48,7 @@ def market_maker_strategy(current_price):
         trades.append({"type": "SELL", "price": round(ask_price, 2), "qty": qty})
     return trades
 
-# Fetch price and update data
+# ✅ Update Data
 price = fetch_price()
 if price:
     st.session_state.price_data.append({"time": pd.Timestamp.now(), "price": price})
@@ -56,14 +56,14 @@ if price:
     for t in trades:
         st.session_state.trade_log.append({"time": pd.Timestamp.now(), **t})
 
-# Display price chart
+# ✅ Price Chart
 st.subheader("📈 Live Price Feed (BTC/USDT)")
 if len(st.session_state.price_data) > 5:
     df_price = pd.DataFrame(st.session_state.price_data[-100:])
     fig = px.line(df_price, x="time", y="price", title="Live BTC/USDT Price")
     st.plotly_chart(fig, use_container_width=True)
 
-# Display trade log and P&L
+# ✅ Trade Log & P&L
 st.subheader("📜 Trade Log & Simulated P&L")
 if len(st.session_state.trade_log) > 0:
     df_trades = pd.DataFrame(st.session_state.trade_log[-20:])
