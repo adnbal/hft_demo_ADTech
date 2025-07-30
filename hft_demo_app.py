@@ -2,10 +2,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import requests
-import json
 import time
 import plotly.express as px
-from websocket import create_connection
 
 # Streamlit Page Config
 st.set_page_config(page_title="HFT Prototype Demo", layout="wide")
@@ -21,13 +19,13 @@ if "price_data" not in st.session_state:
 if "trade_log" not in st.session_state:
     st.session_state.trade_log = []
 
-# Binance Testnet WebSocket (one-time fetch for simplicity)
+# Fetch Price using Binance Testnet REST API
 def fetch_price():
+    url = "https://testnet.binance.vision/api/v3/ticker/price?symbol=BTCUSDT"
     try:
-        ws = create_connection("wss://testnet.binance.vision/ws/btcusdt@trade")
-        message = json.loads(ws.recv())
-        ws.close()
-        return float(message["p"])
+        response = requests.get(url)
+        data = response.json()
+        return float(data["price"])
     except Exception as e:
         st.error(f"Error fetching price: {e}")
         return None
@@ -72,5 +70,6 @@ if len(st.session_state.trade_log) > 0:
     st.metric("💰 Simulated P&L", f"{pnl:.2f} USDT")
     st.dataframe(df_trades)
 
-# Auto-refresh every few seconds
-st.experimental_rerun() if st.sidebar.button("Refresh Now") else time.sleep(refresh_rate)
+# Auto-refresh
+time.sleep(refresh_rate)
+st.experimental_rerun()
