@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import requests
-import time
 import plotly.express as px
+from streamlit_autorefresh import st_autorefresh
 
 # Streamlit Page Config
 st.set_page_config(page_title="HFT Prototype Demo", layout="wide")
@@ -12,6 +12,9 @@ st.title("⚡ High-Frequency Trading Prototype (Binance Testnet)")
 # Sidebar Settings
 st.sidebar.header("⚙️ Settings")
 refresh_rate = st.sidebar.slider("Refresh Interval (seconds)", 1, 10, 3)
+
+# Enable auto-refresh
+st_autorefresh(interval=refresh_rate * 1000, key="refresh")
 
 # Initialize Session State
 if "price_data" not in st.session_state:
@@ -69,7 +72,3 @@ if len(st.session_state.trade_log) > 0:
     pnl = (sell_sum - buy_sum) * 0.001
     st.metric("💰 Simulated P&L", f"{pnl:.2f} USDT")
     st.dataframe(df_trades)
-
-# Auto-refresh
-time.sleep(refresh_rate)
-st.experimental_rerun()
