@@ -15,7 +15,7 @@ st.title("⚡ Advanced High-Frequency Trading Prototype (Binance Testnet)")
 st.sidebar.header("⚙️ Settings")
 refresh_interval = st.sidebar.slider("Refresh Interval (seconds)", 1, 5, 2)
 
-# ✅ Auto-refresh
+# ✅ Auto-refresh for Streamlit Cloud
 st_autorefresh(interval=refresh_interval * 1000, key="refresh")
 
 # ✅ Initialize Session State
@@ -34,7 +34,7 @@ if "pending_order" not in st.session_state:
 TRADE_WS = "wss://testnet.binance.vision/ws/btcusdt@trade"
 DEPTH_WS = "wss://testnet.binance.vision/ws/btcusdt@depth5@100ms"
 
-# ✅ WebSocket Functions
+# ✅ WebSocket Callbacks
 def on_trade(ws, message):
     data = json.loads(message)
     price = float(data['p'])
@@ -47,12 +47,9 @@ def on_depth(ws, message):
     st.session_state.order_book = {"bids": bids, "asks": asks}
 
 def start_ws():
-    # Trade Stream
     ws_trade = websocket.WebSocketApp(TRADE_WS, on_message=on_trade)
-    threading.Thread(target=ws_trade.run_forever, daemon=True).start()
-
-    # Depth Stream
     ws_depth = websocket.WebSocketApp(DEPTH_WS, on_message=on_depth)
+    threading.Thread(target=ws_trade.run_forever, daemon=True).start()
     threading.Thread(target=ws_depth.run_forever, daemon=True).start()
 
 if "ws_started" not in st.session_state:
@@ -85,7 +82,7 @@ def market_maker():
 
 market_maker()
 
-# ✅ Dummy Order Feature
+# ✅ Dummy Order UI
 st.sidebar.subheader("🛒 Place Dummy Order")
 order_type = st.sidebar.selectbox("Order Type", ["BUY", "SELL"])
 preferred_price = st.sidebar.number_input("Preferred Price (USDT)", min_value=10000.0, value=100000.0)
@@ -101,14 +98,12 @@ if st.sidebar.button("Submit Order"):
     }
     st.sidebar.success(f"Order placed: {order_type} {order_qty} BTC at {preferred_price} USDT")
 
-# ✅ Check if Dummy Order Can Execute
+# ✅ Check Dummy Order Execution
 if st.session_state.pending_order and st.session_state.pending_order["status"] == "OPEN":
     latest_price = st.session_state.price_data[-1]["price"] if st.session_state.price_data else None
     if latest_price:
         if (st.session_state.pending_order["type"] == "BUY" and latest_price <= st.session_state.pending_order["price"]) or \
            (st.session_state.pending_order["type"] == "SELL" and latest_price >= st.session_state.pending_order["price"]):
-
-            # Execute Order
             executed_order = st.session_state.pending_order
             executed_order["status"] = "FILLED"
             executed_order["execution_price"] = latest_price
@@ -123,7 +118,10 @@ if st.session_state.pending_order and st.session_state.pending_order["status"] =
             st.sidebar.success(f"✅ Order executed at {latest_price} USDT")
             st.session_state.pending_order = None
 
-# ✅ UI Layout
+# ✅ Debug Info
+st.write(f"DEBUG: Price ticks received = {len(st.session_state.price_data)}")
+
+# ✅ Layout: Price Chart and Order Book
 col1, col2 = st.columns(2)
 
 # ✅ Price Chart
@@ -131,9 +129,11 @@ with col1:
     st.subheader("📈 Live BTC/USDT Price")
     if len(st.session_state.price_data) > 5:
         df_price = pd.DataFrame(st.session_state.price_data[-100:])
-        fig = go.Figure(go.Scatter(x=df_price["time"], y=df_price["price"], mode="lines", name="Price"))
+        fig = go.Figure(go.Scatter(x=df_price["time"], y=df_price["price"], mode="lines+markers", line=dict(color="blue")))
         fig.update_layout(title="BTC/USDT Price", xaxis_title="Time", yaxis_title="Price")
         st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("⏳ Waiting for price data to stream in from Binance Testnet...")
 
 # ✅ Order Book Visualization
 with col2:
@@ -147,6 +147,8 @@ with col2:
         fig_ob.add_trace(go.Bar(x=ask_prices, y=ask_qty, name="Asks", marker_color="red"))
         fig_ob.update_layout(barmode="overlay", title="Order Book Depth", xaxis_title="Price", yaxis_title="Qty")
         st.plotly_chart(fig_ob, use_container_width=True)
+    else:
+        st.info("⏳ Waiting for order book data...")
 
 # ✅ Trade Log and P&L
 st.subheader("📜 Trade Log & P&L")
