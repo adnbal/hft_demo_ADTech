@@ -55,7 +55,7 @@ st.markdown(f"""
     .main > div {{
         padding-top: 0rem;
     }}
-    /* Neon Titles (clean font, no highlight inside text) */
+    /* Neon Titles */
     .neon-title {{
         font-size: 22px;
         font-weight: bold;
@@ -65,7 +65,6 @@ st.markdown(f"""
         border-radius: 12px;
         padding: 10px;
         margin-bottom: 15px;
-        text-shadow: none;
         box-shadow: 0 0 15px {color}, 0 0 30px {color};
     }}
     /* AI Signal Box */
@@ -80,10 +79,11 @@ st.markdown(f"""
         box-shadow: 0 0 15px {color}, 0 0 30px {color};
         margin-bottom: 15px;
     }}
-    /* Side Panels */
-    .left-panel, .right-panel {{
+    /* Panels with grey background + border */
+    .panel {{
         background-color: #1f2937;
         border-radius: 12px;
+        border: 2px solid #3a3a3a;
         padding: 20px;
         height: 100%;
     }}
@@ -95,7 +95,7 @@ col_ai, col_main, col_trade = st.columns([0.35, 1.3, 0.6])
 
 # ---- LEFT AI PANEL ----
 with col_ai:
-    st.markdown("<div class='left-panel'>", unsafe_allow_html=True)
+    st.markdown("<div class='panel'>", unsafe_allow_html=True)
     st.markdown(f"<div class='neon-title'>🤖 AI Market Intelligence</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='neon-box'>{signal}</div>", unsafe_allow_html=True)
     st.write(reason)
@@ -104,6 +104,7 @@ with col_ai:
 
 # ---- MIDDLE MAIN PANEL ----
 with col_main:
+    st.markdown("<div class='panel'>", unsafe_allow_html=True)
     st.markdown(f"<div class='neon-title'>⚡ High Frequency Trading Dashboard</div>", unsafe_allow_html=True)
 
     # Price & Volume Chart
@@ -120,7 +121,7 @@ with col_main:
                           height=400)
         st.plotly_chart(fig, use_container_width=True)
 
-    # P&L Chart
+    # P&L Line Chart
     pnl = [random.uniform(-100, 150) for _ in range(len(df))]
     st.markdown(f"<div class='neon-title'>📊 P&L Analysis</div>", unsafe_allow_html=True)
     fig_pnl = go.Figure()
@@ -133,9 +134,11 @@ with col_main:
     trade_df = pd.DataFrame(st.session_state.trade_log)
     st.dataframe(trade_df if not trade_df.empty else pd.DataFrame(columns=["time", "side", "qty", "price"]))
 
+    st.markdown("</div>", unsafe_allow_html=True)
+
 # ---- RIGHT TRADING PANEL ----
 with col_trade:
-    st.markdown("<div class='right-panel'>", unsafe_allow_html=True)
+    st.markdown("<div class='panel'>", unsafe_allow_html=True)
     st.markdown(f"<div class='neon-title'>🛠 Trading Panel</div>", unsafe_allow_html=True)
 
     mode = st.radio("Mode", ["Simulation", "Live"])
