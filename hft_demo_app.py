@@ -4,7 +4,7 @@ import numpy as np
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import random
-import time
+from streamlit_autorefresh import st_autorefresh
 
 # --------------------- PAGE CONFIG ---------------------
 st.set_page_config(page_title="⚡ HFT AI Dashboard", layout="wide")
@@ -15,7 +15,7 @@ if "price_data" not in st.session_state:
     st.session_state.price_data = [
         {"time": datetime.now() - timedelta(seconds=i*5), "price": base_price + random.uniform(-50, 50),
          "volume": random.uniform(0.5, 3)} for i in range(50)
-    ][::-1]  # Pre-populate 50 ticks
+    ][::-1]  # Preload 50 ticks
 
 if "trade_log" not in st.session_state:
     st.session_state.trade_log = []
@@ -63,7 +63,7 @@ df = pd.DataFrame(st.session_state.price_data)
 # --------------------- LAYOUT ---------------------
 col1, col2 = st.columns([2, 1])
 
-# --------------------- PRICE & VOLUME CHART ---------------------
+# --------------------- PRICE CHART ---------------------
 with col1:
     st.subheader("📈 Live BTC Price & Volume")
     fig = go.Figure()
@@ -111,21 +111,19 @@ st.table(metrics_df)
 
 # --------------------- AI MARKET INTELLIGENCE ---------------------
 st.subheader("🤖 AI Market Intelligence")
-# Compute short trend
 recent_prices = df['price'].tail(10).tolist()
 trend = np.polyfit(range(len(recent_prices)), recent_prices, 1)[0]
 
-# AI recommendation logic
 if trend > 0:
     recommendation = "BUY"
     color = "#00FF00"
-    rationale = "Price trend is upward, indicating bullish momentum. Buyers dominate order flow."
-    forecast = "Price expected to rise by ~0.8% in next few minutes based on volatility patterns."
+    rationale = "Uptrend detected with strong buying momentum."
+    forecast = "Price likely to rise by 0.5% - 1.2% in the next 10 mins."
 else:
     recommendation = "SELL"
     color = "#FF3131"
-    rationale = "Downward slope detected with increasing sell pressure."
-    forecast = "Price likely to drop ~1.2% short-term unless liquidity spike occurs."
+    rationale = "Downtrend forming with higher selling pressure."
+    forecast = "Price may fall by 0.8% - 1.5% soon unless buyers step in."
 
 ai_html = f"""
 <div style='background-color:black; border: 2px solid {color}; border-radius:15px;
@@ -140,6 +138,4 @@ st.markdown(ai_html, unsafe_allow_html=True)
 
 # --------------------- AUTO REFRESH EVERY 30 SECONDS ---------------------
 st.caption("Refreshing every 30 seconds...")
-st_autorefresh = st.experimental_singleton(lambda: None)  # Dummy to avoid errors
-time.sleep(30)
-st.rerun()
+st_autorefresh(interval=30 * 1000, key="hft_refresh")
