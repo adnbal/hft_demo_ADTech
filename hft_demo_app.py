@@ -38,6 +38,21 @@ for key, value in {
     if key not in st.session_state:
         st.session_state[key] = value
 
+# ✅ Define update_positions() BEFORE using it
+def update_positions(side, qty, trade_price):
+    if side == "BUY":
+        total_cost = st.session_state.avg_buy_price * st.session_state.position_qty
+        total_cost += trade_price * qty
+        st.session_state.position_qty += qty
+        st.session_state.avg_buy_price = total_cost / st.session_state.position_qty
+    elif side == "SELL":
+        if st.session_state.position_qty >= qty:
+            realized = (trade_price - st.session_state.avg_buy_price) * qty
+            st.session_state.realized_pnl += realized
+            st.session_state.position_qty -= qty
+            if st.session_state.position_qty == 0:
+                st.session_state.avg_buy_price = 0.0
+
 # ✅ Utility: Signature for Binance API
 def sign(params):
     query_string = urllib.parse.urlencode(params)
@@ -157,22 +172,7 @@ if st.sidebar.button("Submit Order"):
         else:
             st.sidebar.error(f"Error: {result}")
 
-# ✅ Update Position & P&L
-def update_positions(side, qty, trade_price):
-    if side == "BUY":
-        total_cost = st.session_state.avg_buy_price * st.session_state.position_qty
-        total_cost += trade_price * qty
-        st.session_state.position_qty += qty
-        st.session_state.avg_buy_price = total_cost / st.session_state.position_qty
-    elif side == "SELL":
-        if st.session_state.position_qty >= qty:
-            realized = (trade_price - st.session_state.avg_buy_price) * qty
-            st.session_state.realized_pnl += realized
-            st.session_state.position_qty -= qty
-            if st.session_state.position_qty == 0:
-                st.session_state.avg_buy_price = 0.0
-
-# ✅ Unrealized P&L
+# ✅ Unrealized P&L Calculation
 if st.session_state.position_qty > 0 and price:
     unrealized = (price - st.session_state.avg_buy_price) * st.session_state.position_qty
 else:
