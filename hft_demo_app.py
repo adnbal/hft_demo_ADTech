@@ -1,12 +1,9 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import json
-import threading
-import websocket
+import requests
 import plotly.graph_objects as go
 from streamlit_autorefresh import st_autorefresh
-import requests
 import time
 
 # ✅ Page Config
@@ -16,11 +13,9 @@ st.title("⚡ Advanced High-Frequency Trading Prototype (Binance Testnet)")
 # ✅ Sidebar Settings
 st.sidebar.header("⚙️ Settings")
 refresh_interval = st.sidebar.slider("Refresh Interval (seconds)", 1, 5, 2)
-
-# ✅ Auto-refresh UI
 st_autorefresh(interval=refresh_interval * 1000, key="refresh")
 
-# ✅ Initialize Session State
+# ✅ Session State Initialization
 if "price_data" not in st.session_state:
     st.session_state.price_data = []
 if "trade_log" not in st.session_state:
@@ -29,38 +24,22 @@ if "pnl" not in st.session_state:
     st.session_state.pnl = 0.0
 if "pending_order" not in st.session_state:
     st.session_state.pending_order = None
-if "last_data_time" not in st.session_state:
-    st.session_state.last_data_time = time.time()
 
-# ✅ Binance API URLs
-TRADE_WS = "wss://testnet.binance.vision/ws/btcusdt@trade"
+# ✅ Binance REST API URLs
+PRICE_API = "https://testnet.binance.vision/api/v3/ticker/price?symbol=BTCUSDT"
 ORDER_BOOK_API = "https://testnet.binance.vision/api/v3/depth?symbol=BTCUSDT&limit=5"
 
-# ✅ WebSocket Callbacks for Price
-def on_trade(ws, message):
-    data = json.loads(message)
-    price = float(data['p'])
-    st.session_state.price_data.append({"time": pd.Timestamp.now(), "price": price})
-    st.session_state.last_data_time = time.time()
-
-def start_ws():
+# ✅ Fetch Live Price
+def fetch_live_price():
     try:
-        ws_trade = websocket.WebSocketApp(TRADE_WS, on_message=on_trade)
-        threading.Thread(target=ws_trade.run_forever, daemon=True).start()
-    except Exception as e:
-        print(f"WebSocket error: {e}")
+        response = requests.get(PRICE_API, timeout=3)
+        if response.status_code == 200:
+            return float(response.json()["price"])
+    except:
+        return None
+    return None
 
-# ✅ Reconnect WebSocket if dead
-if time.time() - st.session_state.last_data_time > 5:
-    st.sidebar.warning("Reconnecting WebSocket...")
-    start_ws()
-
-# ✅ Ensure WebSocket started
-if "ws_started" not in st.session_state:
-    start_ws()
-    st.session_state.ws_started = True
-
-# ✅ Get Real Order Book from Binance REST API
+# ✅ Fetch Order Book
 def fetch_order_book():
     try:
         response = requests.get(ORDER_BOOK_API, timeout=3)
@@ -71,20 +50,22 @@ def fetch_order_book():
             return bids, asks
     except:
         return [], []
+    return [], []
 
+# ✅ Update Price & Order Book
+current_price = fetch_live_price()
 bids, asks = fetch_order_book()
+
+if current_price:
+    st.session_state.price_data.append({"time": pd.Timestamp.now(), "price": current_price})
 
 # ✅ Market-Making Simulation
 def market_maker():
-    if len(st.session_state.price_data) < 1:
-        # Inject dummy price if WebSocket is slow
-        st.session_state.price_data.append({"time": pd.Timestamp.now(), "price": 100000.0})
+    if not current_price:
         return
-
-    latest_price = st.session_state.price_data[-1]["price"]
     qty = 0.001
-    bid_price = latest_price * 0.999
-    ask_price = latest_price * 1.001
+    bid_price = current_price * 0.999
+    ask_price = current_price * 1.001
 
     buy_executed = np.random.choice([True, False], p=[0.3, 0.7])
     sell_executed = np.random.choice([True, False], p=[0.3, 0.7])
@@ -106,7 +87,7 @@ market_maker()
 # ✅ Dummy Order UI
 st.sidebar.subheader("🛒 Place Dummy Order")
 order_type = st.sidebar.selectbox("Order Type", ["BUY", "SELL"])
-preferred_price = st.sidebar.number_input("Preferred Price (USDT)", min_value=10000.0, value=100000.0)
+preferred_price = st.sidebar.number_input("Preferred Price (USDT)", min_value=10000.0, value=30000.0)
 order_qty = st.sidebar.number_input("Order Quantity (BTC)", min_value=0.0001, value=0.001)
 
 if st.sidebar.button("Submit Order"):
@@ -121,26 +102,25 @@ if st.sidebar.button("Submit Order"):
 
 # ✅ Check Dummy Order Execution
 if st.session_state.pending_order and st.session_state.pending_order["status"] == "OPEN":
-    latest_price = st.session_state.price_data[-1]["price"] if st.session_state.price_data else None
-    if latest_price:
-        if (st.session_state.pending_order["type"] == "BUY" and latest_price <= st.session_state.pending_order["price"]) or \
-           (st.session_state.pending_order["type"] == "SELL" and latest_price >= st.session_state.pending_order["price"]):
+    if current_price:
+        if (st.session_state.pending_order["type"] == "BUY" and current_price <= st.session_state.pending_order["price"]) or \
+           (st.session_state.pending_order["type"] == "SELL" and current_price >= st.session_state.pending_order["price"]):
             executed_order = st.session_state.pending_order
             executed_order["status"] = "FILLED"
-            executed_order["execution_price"] = latest_price
+            executed_order["execution_price"] = current_price
             st.session_state.trade_log.append(executed_order)
 
             # Update P&L
             if executed_order["type"] == "BUY":
-                st.session_state.pnl -= latest_price * executed_order["qty"]
+                st.session_state.pnl -= current_price * executed_order["qty"]
             else:
-                st.session_state.pnl += latest_price * executed_order["qty"]
+                st.session_state.pnl += current_price * executed_order["qty"]
 
-            st.sidebar.success(f"✅ Order executed at {latest_price} USDT")
+            st.sidebar.success(f"✅ Order executed at {current_price} USDT")
             st.session_state.pending_order = None
 
 # ✅ Debug Info
-st.write(f"DEBUG: Price ticks received = {len(st.session_state.price_data)}")
+st.write(f"DEBUG: Price ticks received = {len(st.session_state.price_data)} | Current Price: {current_price}")
 
 # ✅ Layout: Price Chart and Order Book
 col1, col2 = st.columns(2)
@@ -156,7 +136,7 @@ with col1:
     else:
         st.info("⏳ Waiting for price data from Binance Testnet...")
 
-# ✅ Order Book Visualization (Real via REST)
+# ✅ Order Book Chart
 with col2:
     st.subheader("📊 Order Book Depth")
     if bids and asks:
