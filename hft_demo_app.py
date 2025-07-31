@@ -19,6 +19,7 @@ st.markdown("""
     }
     .sidebar .sidebar-content {
         background: #1e293b;
+        padding: 15px;
     }
     .neon-box {
         border: 2px solid;
@@ -26,18 +27,19 @@ st.markdown("""
         padding: 15px;
         text-align: center;
         font-size: 18px;
-        animation: glow 1.5s infinite alternate;
+        font-weight: bold;
+        animation: glow-green 1.5s infinite alternate;
     }
-    @keyframes glow {
-        from { box-shadow: 0 0 10px #39ff14; }
-        to { box-shadow: 0 0 20px #39ff14; }
+    @keyframes glow-green {
+        from { box-shadow: 0 0 10px #39ff14; border-color:#39ff14; color:#39ff14;}
+        to { box-shadow: 0 0 25px #39ff14; border-color:#39ff14; color:#39ff14;}
     }
     .neon-sell {
         animation: glow-red 1.5s infinite alternate;
     }
     @keyframes glow-red {
-        from { box-shadow: 0 0 10px #ff073a; }
-        to { box-shadow: 0 0 20px #ff073a; }
+        from { box-shadow: 0 0 10px #ff073a; border-color:#ff073a; color:#ff073a;}
+        to { box-shadow: 0 0 25px #ff073a; border-color:#ff073a; color:#ff073a;}
     }
     .buy-button {
         background: #39ff14;
@@ -46,6 +48,9 @@ st.markdown("""
         border-radius: 10px;
         padding: 10px 20px;
         border: none;
+        width: 100%;
+        font-size: 16px;
+        margin-top: 10px;
         box-shadow: 0 0 15px #39ff14;
     }
     .buy-button:hover {
@@ -58,10 +63,17 @@ st.markdown("""
         border-radius: 10px;
         padding: 10px 20px;
         border: none;
+        width: 100%;
+        font-size: 16px;
+        margin-top: 10px;
         box-shadow: 0 0 15px #ff073a;
     }
     .sell-button:hover {
         box-shadow: 0 0 30px #ff073a;
+    }
+    h1, h2, h3 {
+        color: #39ff14;
+        text-shadow: 0 0 10px #39ff14;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -99,22 +111,52 @@ if len(recent_prices) >= 10:
         reason = "Price trend is downward, indicating bearish momentum. Sellers dominate order flow."
         forecast = "Price likely to drop by ~0.7% in next few minutes due to negative trend."
 
-# -------------------- SIDEBAR AI PANEL --------------------
-st.sidebar.markdown("<h2 style='color:#39ff14;'>🤖 AI Market Intelligence</h2>", unsafe_allow_html=True)
+# -------------------- SIDEBAR: AI PANEL + TRADING PANEL --------------------
+st.sidebar.markdown("<h2>🤖 AI Market Intelligence</h2>", unsafe_allow_html=True)
 if signal == "BUY":
     st.sidebar.markdown(f"<div class='neon-box'>{signal}</div>", unsafe_allow_html=True)
-else:
+elif signal == "SELL":
     st.sidebar.markdown(f"<div class='neon-box neon-sell'>{signal}</div>", unsafe_allow_html=True)
+else:
+    st.sidebar.markdown(f"<div class='neon-box'>HOLD</div>", unsafe_allow_html=True)
 
 st.sidebar.write(reason)
 st.sidebar.write(forecast)
 
+# Trading Panel
+st.sidebar.markdown("<h2>🛠 Trading Panel</h2>", unsafe_allow_html=True)
+mode = st.sidebar.radio("Mode", ["Simulation", "Live"])
+side = st.sidebar.radio("Side", ["BUY", "SELL"])
+qty = st.sidebar.number_input("Quantity", min_value=1, value=5)
+order_type = st.sidebar.radio("Order Type", ["MARKET", "LIMIT"])
+price_input = None
+if order_type == "LIMIT":
+    price_input = st.sidebar.number_input("Limit Price", min_value=10000, value=30000)
+if st.sidebar.button("Submit Order"):
+    trade_price = price_input if order_type == "LIMIT" else price
+    st.session_state.trade_log.append({
+        "time": datetime.now(),
+        "side": side,
+        "qty": qty,
+        "price": round(trade_price, 2)
+    })
+
+# BUY / SELL Buttons
+st.sidebar.markdown("<h3>Quick Actions</h3>", unsafe_allow_html=True)
+st.sidebar.button("BUY", key="buy_button", help="Quick BUY Order", on_click=lambda: st.session_state.trade_log.append({
+    "time": datetime.now(), "side": "BUY", "qty": 5, "price": round(price, 2)
+}), use_container_width=True)
+st.sidebar.button("SELL", key="sell_button", help="Quick SELL Order", on_click=lambda: st.session_state.trade_log.append({
+    "time": datetime.now(), "side": "SELL", "qty": 5, "price": round(price, 2)
+}), use_container_width=True)
+
 # -------------------- MAIN DASHBOARD --------------------
-st.markdown("<h1 style='text-align:center;color:#39ff14;'>⚡ High Frequency Trading AI Dashboard</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align:center;'>⚡ High Frequency Trading AI Dashboard</h1>", unsafe_allow_html=True)
 
 col1, col2 = st.columns([2, 1])
 
 with col1:
+    # Live BTC Price with Volume
     st.subheader("📈 Live BTC Price & Volume")
     df = pd.DataFrame(st.session_state.price_data[-100:])
     fig = go.Figure()
@@ -137,6 +179,7 @@ with col1:
     st.plotly_chart(fig_pnl, use_container_width=True)
 
 with col2:
+    # Trade Log
     st.subheader("📜 Trade Log")
     trade_df = pd.DataFrame(st.session_state.trade_log)
     if not trade_df.empty:
@@ -144,16 +187,9 @@ with col2:
     else:
         st.write("No trades yet.")
 
+    # Portfolio Metrics
     st.subheader("📊 Portfolio Metrics")
     st.table(pd.DataFrame({
         "Metric": ["Open Position (BTC)", "Current Value (USD)", "Average Entry Price"],
         "Value": ["0", "$0.00", "$0.00"]
     }))
-
-# -------------------- TRADING PANEL --------------------
-st.markdown("### 🛠 Trading Panel")
-colA, colB, colC = st.columns([1, 1, 1])
-with colA:
-    st.button("BUY", key="buy", help="Place BUY order", use_container_width=True)
-with colB:
-    st.button("SELL", key="sell", help="Place SELL order", use_container_width=True)
