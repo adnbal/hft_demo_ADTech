@@ -30,7 +30,7 @@ submit = st.sidebar.button("Submit Order")
 
 # -------------------- SIMULATE PRICE STREAM --------------------
 price = 30000 + np.random.randn() * 50  # base price with noise
-volume = np.random.randint(10, 100)
+volume = np.random.randint(10, 200)  # increased for visibility
 
 st.session_state.price_data.append({"time": datetime.now(), "price": price, "volume": volume})
 if len(st.session_state.price_data) > 500:
@@ -57,16 +57,16 @@ fig = go.Figure()
 # Price Line
 fig.add_trace(go.Scatter(x=df['time'], y=df['price'], mode='lines', name='Price', line=dict(color='lime', width=2)))
 
-# Volume Bars on Secondary Axis
-fig.add_trace(go.Bar(x=df['time'], y=df['volume'], name='Volume', marker_color='rgba(0, 200, 255, 0.5)', yaxis='y2'))
+# Volume Bars (secondary axis)
+fig.add_trace(go.Bar(x=df['time'], y=df['volume'], name='Volume', marker_color='rgba(0, 200, 255, 0.6)', yaxis='y2'))
 
 fig.update_layout(
     template="plotly_dark",
     height=400,
     margin=dict(l=20, r=20, t=30, b=20),
     xaxis=dict(title="Time"),
-    yaxis=dict(title="Price (USD)"),
-    yaxis2=dict(title="Volume", overlaying='y', side='right'),
+    yaxis=dict(title="Price (USD)", side="left"),
+    yaxis2=dict(title="Volume", side="right", overlaying="y", showgrid=False),
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
 )
 st.plotly_chart(fig, use_container_width=True)
@@ -79,10 +79,9 @@ if not df_trades.empty:
 else:
     st.write("No trades yet.")
 
-# -------------------- P&L (BAR CHART FIX) --------------------
+# -------------------- REALIZED & UNREALIZED P&L (BIG KPI CARDS) --------------------
 st.subheader("📊 Realized & Unrealized P&L")
 
-# Compute P&L
 realized_pnl = 0.0
 unrealized_pnl = 0.0
 current_price = price
@@ -94,18 +93,14 @@ for t in st.session_state.trade_log:
 for pos in st.session_state.positions:
     unrealized_pnl += (current_price - pos["price"]) * pos["qty"]
 
-# Bar chart for P&L
-pnl_fig = go.Figure(data=[
-    go.Bar(name="Realized P&L", x=[realized_pnl], y=["P&L"], orientation='h', marker=dict(color="lime")),
-    go.Bar(name="Unrealized P&L", x=[unrealized_pnl], y=["P&L"], orientation='h', marker=dict(color="yellow"))
-])
-pnl_fig.update_layout(
-    template="plotly_dark",
-    barmode='stack',
-    height=250,
-    title="P&L Overview"
-)
-st.plotly_chart(pnl_fig, use_container_width=True)
+# KPI cards
+col1, col2 = st.columns(2)
+with col1:
+    st.markdown(f"<h3 style='color:lime;'>Realized P&L (USD)</h3>", unsafe_allow_html=True)
+    st.markdown(f"<h1 style='color:lime;'>${realized_pnl:,.2f}</h1>", unsafe_allow_html=True)
+with col2:
+    st.markdown(f"<h3 style='color:yellow;'>Unrealized P&L (USD)</h3>", unsafe_allow_html=True)
+    st.markdown(f"<h1 style='color:yellow;'>${unrealized_pnl:,.2f}</h1>", unsafe_allow_html=True)
 
 # -------------------- PORTFOLIO METRICS --------------------
 st.subheader("📊 Portfolio Metrics")
