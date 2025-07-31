@@ -8,10 +8,10 @@ from streamlit_autorefresh import st_autorefresh
 # ---------- Page Config ----------
 st.set_page_config(page_title="HFT Dashboard", layout="wide")
 
-# ---------- Auto-refresh every 5 seconds ----------
+# ---------- Auto-refresh ----------
 st_autorefresh(interval=5000, key="refresh")
 
-# ---------- Custom CSS ----------
+# ---------- Custom CSS for Neon & Ticker ----------
 st.markdown("""
     <style>
         body {
@@ -42,6 +42,27 @@ st.markdown("""
             border: 2px solid white;
             height: 100%;
         }
+        /* Ticker Bar */
+        .ticker-container {
+            width: 100%;
+            overflow: hidden;
+            white-space: nowrap;
+            background-color: #1a1a1a;
+            border-bottom: 2px solid #39ff14;
+            padding: 8px 0;
+        }
+        .ticker-text {
+            display: inline-block;
+            animation: ticker 20s linear infinite;
+            font-size: 18px;
+            color: white;
+        }
+        @keyframes ticker {
+            0% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+        }
+        .price-up { color: #39ff14; font-weight: bold; }
+        .price-down { color: #ff073a; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -51,14 +72,23 @@ if "price_data" not in st.session_state:
 if "trade_log" not in st.session_state:
     st.session_state.trade_log = []
 if "positions" not in st.session_state:
-    st.session_state.positions = []  # [{'qty': x, 'price': y}]
+    st.session_state.positions = []
 
 # ---------- Mock Price Feed ----------
 def get_live_price():
     base_price = 30000
     return base_price + random.uniform(-200, 200)
 
-# ---------- AI Signal Logic ----------
+# ---------- Mock Ticker Prices ----------
+assets = {
+    "BTC/USD": 30000 + random.uniform(-150, 150),
+    "ETH/USD": 2000 + random.uniform(-20, 20),
+    "AAPL": 180 + random.uniform(-2, 2),
+    "TSLA": 250 + random.uniform(-3, 3),
+    "AMZN": 135 + random.uniform(-1, 1)
+}
+
+# ---------- AI Signal ----------
 def ai_market_signal():
     if len(st.session_state.price_data) < 10:
         return "HOLD", "Collecting more data for better prediction."
@@ -70,6 +100,15 @@ def ai_market_signal():
         return "SELL", f"Market Signal: SELL. Price trend is downward, bearish momentum. Expect -0.8% fall soon."
     else:
         return "HOLD", "Market is neutral. Wait for a clear trend."
+
+# ---------- Ticker Bar ----------
+ticker_html = "<div class='ticker-container'><div class='ticker-text'>"
+for asset, price in assets.items():
+    change = random.uniform(-1.5, 1.5)
+    color_class = "price-up" if change >= 0 else "price-down"
+    ticker_html += f"&nbsp;&nbsp;{asset}: <span class='{color_class}'>{price:.2f}</span> ({change:+.2f}%)&nbsp;&nbsp;|"
+ticker_html += "</div></div>"
+st.markdown(ticker_html, unsafe_allow_html=True)
 
 # ---------- Layout ----------
 left, middle, right = st.columns([1.5, 3, 1.5])
@@ -115,11 +154,10 @@ with middle:
     else:
         st.info("No trades yet.")
 
-    # Realized PnL Calculation based on positions
+    # PnL Chart
     pnl = []
     cum_pnl = 0
     open_positions = []
-
     for trade in st.session_state.trade_log:
         if trade["side"] == "BUY":
             open_positions.append((trade["qty"], trade["price"]))
@@ -139,7 +177,6 @@ with middle:
                         qty_to_sell = 0
         pnl.append(cum_pnl)
 
-    # PnL Chart
     pnl_fig = go.Figure()
     pnl_fig.add_trace(go.Scatter(x=[t["time"] for t in st.session_state.trade_log], y=pnl, mode='lines', name='PnL', line=dict(color='cyan')))
     pnl_fig.update_layout(template="plotly_dark", title="📊 Realized PnL", height=300)
@@ -164,7 +201,6 @@ with right:
         if side == "BUY":
             st.session_state.positions.append({"qty": qty, "price": trade_price})
         else:
-            # For SELL, just reduce positions (simple simulation)
             if st.session_state.positions:
                 st.session_state.positions.pop(0)
         st.success(f"Order placed: {side} {qty} @ {trade_price}")
