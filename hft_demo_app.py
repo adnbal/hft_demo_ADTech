@@ -15,7 +15,7 @@ BASE_URL = "https://testnet.binance.vision/api"
 
 # ✅ Streamlit Config
 st.set_page_config(page_title="HFT + AI Signals", layout="wide")
-st.title("⚡ HFT Trading App with AI Signals & P&L (Binance Testnet)")
+st.title("⚡ HFT Trading App with AI Signals & Real-Time P&L (Binance Testnet)")
 
 # ✅ Sidebar: Refresh Interval
 st.sidebar.header("⚙️ Settings")
@@ -25,7 +25,7 @@ st_autorefresh(interval=refresh_interval * 1000, key="refresh")
 # ✅ Load Secrets
 API_KEY = st.secrets["binance"]["api_key"]
 API_SECRET = st.secrets["binance"]["api_secret"]
-AI_API_KEY = st.secrets.get("openai", {}).get("api_key", None)  # OpenAI or DeepSeek
+AI_API_KEY = st.secrets.get("openai", {}).get("api_key", None)  # OpenAI/DeepSeek key optional
 
 # ✅ Session State Initialization
 for key, value in {
@@ -35,12 +35,13 @@ for key, value in {
     "realized_pnl": 0.0,
     "position_qty": 0.0,
     "avg_buy_price": 0.0,
-    "mode": "Simulation"
+    "mode": "Simulation",
+    "ai_signal": None
 }.items():
     if key not in st.session_state:
         st.session_state[key] = value
 
-# ✅ Define Update Position Logic
+# ✅ Position Update Logic
 def update_positions(side, qty, trade_price):
     if side == "BUY":
         total_cost = st.session_state.avg_buy_price * st.session_state.position_qty
@@ -115,7 +116,7 @@ def place_order(symbol, side, order_type, quantity, price=None):
     except Exception as e:
         return {"error": str(e)}
 
-# ✅ Fetch Live Price & Order Book
+# ✅ Fetch Live Data
 price = fetch_price()
 bids, asks = fetch_order_book()
 if price:
@@ -168,37 +169,45 @@ st.session_state.pnl_data.append({"time": datetime.now(), "unrealized": unrealiz
 # ✅ RULE-BASED SIGNAL
 signal = "HOLD"
 suggested_price = price
-reason = "Stable price trend."
+reason = "Stable trend."
 if len(st.session_state.price_data) > 10:
     df = pd.DataFrame(st.session_state.price_data)
     sma = df["price"].rolling(10).mean().iloc[-1]
     if price > sma:
         signal = "BUY"
         suggested_price = price * 0.999
-        reason = "Price above 10-period SMA (uptrend)."
+        reason = "Price above 10-SMA (uptrend)."
     elif price < sma:
         signal = "SELL"
         suggested_price = price * 1.001
-        reason = "Price below 10-period SMA (downtrend)."
+        reason = "Price below 10-SMA (downtrend)."
 
-# ✅ AI SIGNAL (if API key available)
-ai_signal = "AI signal unavailable (API key missing)."
+# ✅ AI SIGNAL (On-Demand)
+st.subheader("🤖 AI Trading Signal")
 if AI_API_KEY:
-    try:
-        history = [p["price"] for p in st.session_state.price_data[-20:]]
-        ai_prompt = f"""
-        You are an expert crypto trader. Current BTC price: {price}.
-        Last 20 prices: {history}.
-        Current position: {st.session_state.position_qty} BTC at avg {st.session_state.avg_buy_price}.
-        Should I BUY, SELL, or HOLD? Suggest an entry/exit price in USDT and explain briefly.
-        """
-        headers = {"Authorization": f"Bearer {AI_API_KEY}", "Content-Type": "application/json"}
-        payload = {"model": "gpt-4", "messages": [{"role": "user", "content": ai_prompt}], "max_tokens": 100}
-        r = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-        if r.status_code == 200:
-            ai_signal = r.json()["choices"][0]["message"]["content"]
-    except Exception as e:
-        ai_signal = f"Error fetching AI signal: {e}"
+    if st.button("Get AI Recommendation"):
+        with st.spinner("Fetching AI recommendation..."):
+            try:
+                history = [p["price"] for p in st.session_state.price_data[-20:]]
+                ai_prompt = f"""
+                You are an expert crypto trader. Current BTC price: {price}.
+                Last 20 prices: {history}.
+                Current position: {st.session_state.position_qty} BTC at avg {st.session_state.avg_buy_price}.
+                Should I BUY, SELL, or HOLD? Suggest an entry/exit price in USDT and explain briefly.
+                """
+                headers = {"Authorization": f"Bearer {AI_API_KEY}", "Content-Type": "application/json"}
+                payload = {"model": "gpt-4", "messages": [{"role": "user", "content": ai_prompt}], "max_tokens": 100}
+                r = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=10)
+                if r.status_code == 200:
+                    st.session_state.ai_signal = r.json()["choices"][0]["message"]["content"]
+                else:
+                    st.session_state.ai_signal = f"Error: {r.text}"
+            except Exception as e:
+                st.session_state.ai_signal = f"Error fetching AI signal: {e}"
+    if st.session_state.ai_signal:
+        st.write(f"**AI Suggestion:** {st.session_state.ai_signal}")
+else:
+    st.warning("No AI API key found. Add it in Streamlit secrets to enable AI recommendations.")
 
 # ✅ Display Charts & Panels
 col1, col2 = st.columns(2)
@@ -234,10 +243,9 @@ if len(st.session_state.pnl_data) > 1:
     fig_pnl.add_trace(go.Scatter(x=df_pnl["time"], y=df_pnl["realized"], mode="lines", name="Realized P&L", line=dict(color="green")))
     st.plotly_chart(fig_pnl, use_container_width=True)
 
-# ✅ Trading Signals Panel
-st.subheader("🤖 Trading Signals")
-st.write(f"**Rule-Based Signal:** {signal} at ~{suggested_price:.2f} USDT ({reason})")
-st.write(f"**AI Recommendation:** {ai_signal}")
+# ✅ Rule-Based Trading Signal
+st.subheader("📢 Rule-Based Signal")
+st.write(f"**Signal:** {signal} at ~{suggested_price:.2f} USDT ({reason})")
 
 # ✅ Trade Log
 st.subheader("📜 Trade Log")
