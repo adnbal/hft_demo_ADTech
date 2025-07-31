@@ -73,7 +73,7 @@ with col1:
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     fig.add_trace(go.Scatter(
         x=df['time'], y=df['price'], mode='lines+markers',
-        name='Price', line=dict(color='lime', width=3, glow=True)
+        name='Price', line=dict(color='lime', width=3)
     ), secondary_y=False)
 
     fig.add_trace(go.Bar(
@@ -143,7 +143,7 @@ else:
     recommendation = "WAIT"
     rationale = "Insufficient data for prediction. Collecting more ticks..."
 
-# Neon Glow Style
+# Neon Glow Style for Recommendation
 color = "lime" if recommendation == "BUY" else "red" if recommendation == "SELL" else "yellow"
 st.markdown(f"""
 <div style="padding:15px; border-radius:10px; background-color:black; border:2px solid {color}; text-align:center; font-size:24px; color:{color}; text-shadow: 0 0 20px {color};">
