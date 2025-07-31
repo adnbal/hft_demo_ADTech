@@ -117,7 +117,5 @@ if len(st.session_state.pnl_history) > 0:
     st.plotly_chart(fig_pnl, use_container_width=True)
 
 # ---------------------- AUTO REFRESH ----------------------
-st_autorefresh = st.empty()
-st_autorefresh.text("Refreshing every 5 seconds...")
 time.sleep(5)
-st.experimental_rerun()
+st.rerun()
