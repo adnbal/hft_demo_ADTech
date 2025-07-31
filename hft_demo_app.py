@@ -9,37 +9,36 @@ import time
 # -------------------- PAGE CONFIG --------------------
 st.set_page_config(page_title="HFT AI Dashboard", layout="wide")
 
-# -------------------- CUSTOM CSS FOR FIXED AI PANEL --------------------
+# -------------------- CUSTOM CSS --------------------
 st.markdown("""
     <style>
-    /* Add body padding so content doesn't hide under fixed AI panel */
-    body {
-        padding-top: 180px; /* space for fixed header */
+    /* Push main content down so AI section doesn't overlap */
+    .block-container {
+        padding-top: 200px !important;
     }
 
-    /* Fixed AI Intelligence Panel */
-    .fixed-ai-panel {
+    /* Fixed AI Intelligence Panel inside Streamlit container */
+    .fixed-ai {
         position: fixed;
         top: 0;
         left: 0;
-        right: 0;
+        width: 100%;
+        background: #0e1117;
         z-index: 9999;
-        background-color: #0e1117;
+        border-radius: 0 0 15px 15px;
         padding: 15px;
         text-align: left;
-        border-radius: 0 0 15px 15px;
         animation: neonPulse 1.5s infinite alternate;
+        box-shadow: 0 0 15px #39FF14;
     }
 
     /* Neon Glow Animation */
     @keyframes neonPulse {
         from {
-            box-shadow: 0 0 10px #39FF14, 0 0 20px #39FF14;
-            border: 2px solid #39FF14;
+            box-shadow: 0 0 15px #39FF14, 0 0 30px #39FF14;
         }
         to {
-            box-shadow: 0 0 25px #39FF14, 0 0 50px #39FF14;
-            border: 2px solid #39FF14;
+            box-shadow: 0 0 30px #39FF14, 0 0 60px #39FF14;
         }
     }
 
@@ -66,41 +65,34 @@ if "trade_log" not in st.session_state:
 if "positions" not in st.session_state:
     st.session_state.positions = []
 
-# Simulate live price update
+# Simulate price and volume
 price = 30000 + random.uniform(-100, 100)
 volume = random.uniform(50, 200)
-st.session_state.price_data.append({
-    "time": datetime.now(),
-    "price": price,
-    "volume": volume
-})
+st.session_state.price_data.append({"time": datetime.now(), "price": price, "volume": volume})
 
-# -------------------- AI INTELLIGENCE --------------------
+# -------------------- AI SIGNAL --------------------
 price_trend = "UP" if random.choice([True, False]) else "DOWN"
 if price_trend == "UP":
     ai_signal = "BUY"
     ai_message = """
     <p class='buy-signal'>Market Signal: BUY ✅</p>
-    Price trend is upward, indicating bullish momentum.<br>
-    Buyers dominate order flow.<br>
-    Forecast: Price expected to rise by ~0.8% in next few minutes.<br>
-    Volatility within normal range, trend supported by strong volume.
+    - Trend: Bullish momentum detected.<br>
+    - Buyers dominate order flow.<br>
+    - Forecast: +0.8% possible upside in next few mins.<br>
+    - Volume indicates strong support.
     """
 else:
     ai_signal = "SELL"
     ai_message = """
     <p class='sell-signal'>Market Signal: SELL ❌</p>
-    Price trend is downward, indicating bearish momentum.<br>
-    Sellers dominate order book.<br>
-    Forecast: Price expected to drop by ~0.7% in next few minutes.<br>
-    Caution: Short-term resistance levels breached.
+    - Trend: Bearish pressure building.<br>
+    - Sellers dominate order book.<br>
+    - Forecast: -0.7% downside likely.<br>
+    - Caution: Watch for resistance breaks.
     """
 
 # -------------------- FIXED AI PANEL --------------------
-st.markdown('<div class="fixed-ai-panel">', unsafe_allow_html=True)
-st.markdown("### 🤖 AI Market Intelligence")
-st.markdown(ai_message, unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
+st.markdown(f"<div class='fixed-ai'><h3>🤖 AI Market Intelligence</h3>{ai_message}</div>", unsafe_allow_html=True)
 
 # -------------------- MAIN DASHBOARD --------------------
 st.title("⚡ High Frequency Trading AI Dashboard")
@@ -112,16 +104,14 @@ df = pd.DataFrame(st.session_state.price_data)
 
 if not df.empty:
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    # Price
-    fig.add_trace(go.Scatter(
-        x=df['time'], y=df['price'], mode='lines+markers',
-        name='Price', line=dict(color='lime', width=3)
-    ), secondary_y=False)
-    # Volume
-    fig.add_trace(go.Bar(
-        x=df['time'], y=df['volume'], name='Volume',
-        marker=dict(color='rgba(0,150,255,0.5)')
-    ), secondary_y=True)
+    # Price line
+    fig.add_trace(go.Scatter(x=df['time'], y=df['price'], mode='lines+markers',
+                             name='Price', line=dict(color='lime', width=3)),
+                  secondary_y=False)
+    # Volume bars
+    fig.add_trace(go.Bar(x=df['time'], y=df['volume'], name='Volume',
+                         marker=dict(color='rgba(0,150,255,0.5)')),
+                  secondary_y=True)
     fig.update_layout(template="plotly_dark", height=400)
     fig.update_yaxes(title_text="BTC Price (USD)", secondary_y=False)
     fig.update_yaxes(title_text="Volume", secondary_y=True)
@@ -149,7 +139,10 @@ if st.button("Submit Order"):
 # -------------------- TRADE LOG --------------------
 st.subheader("📜 Trade Log")
 df_trades = pd.DataFrame(st.session_state.trade_log)
-st.dataframe(df_trades if not df_trades.empty else pd.DataFrame(columns=["No trades yet."]))
+if not df_trades.empty:
+    st.dataframe(df_trades.tail(10))
+else:
+    st.info("No trades yet.")
 
 # -------------------- P&L --------------------
 st.subheader("📊 Realized & Unrealized P&L")
@@ -181,4 +174,4 @@ st.table(metrics_df)
 # -------------------- AUTO REFRESH --------------------
 st.caption("Refreshing every 5 seconds...")
 time.sleep(5)
-st.experimental_rerun()
+st.rerun()
