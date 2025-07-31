@@ -17,9 +17,10 @@ st.markdown("""
         background-color: #0f172a;
         color: white;
     }
-    .sidebar .sidebar-content {
-        background: #1e293b;
+    .sidebar .sidebar-content, .right-panel {
+        background: #1e293b; /* Dark Grey */
         padding: 15px;
+        border-radius: 10px;
     }
     .neon-box {
         border: 2px solid;
@@ -71,9 +72,18 @@ st.markdown("""
     .sell-button:hover {
         box-shadow: 0 0 30px #ff073a;
     }
-    h1, h2, h3 {
-        color: #39ff14;
-        text-shadow: 0 0 10px #39ff14;
+    /* Title colors */
+    h1 {
+        color: #00e6e6; /* Cyan glow for main title */
+        text-shadow: 0 0 15px #00e6e6;
+    }
+    h2 {
+        color: #ff9800; /* Orange for AI Intelligence and Trading Panel */
+        text-shadow: 0 0 10px #ff9800;
+    }
+    h3 {
+        color: #39ff14; /* Green for metrics */
+        text-shadow: 0 0 8px #39ff14;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -124,7 +134,7 @@ with st.sidebar:
     st.write(forecast)
 
 # -------------------- MAIN LAYOUT WITH TWO COLUMNS --------------------
-col_left, col_main, col_right = st.columns([0.1, 1.5, 0.6])
+col_left, col_main, col_right = st.columns([0.05, 1.5, 0.6])
 
 with col_main:
     st.markdown("<h1 style='text-align:center;'>⚡ High Frequency Trading AI Dashboard</h1>", unsafe_allow_html=True)
@@ -166,6 +176,7 @@ with col_main:
 
 # -------------------- RIGHT PANEL: TRADING PANEL --------------------
 with col_right:
+    st.markdown("<div class='right-panel'>", unsafe_allow_html=True)
     st.markdown("<h2>🛠 Trading Panel</h2>", unsafe_allow_html=True)
     mode = st.radio("Mode", ["Simulation", "Live"])
     side = st.radio("Side", ["BUY", "SELL"])
@@ -189,3 +200,4 @@ with col_right:
         st.session_state.trade_log.append({"time": datetime.now(), "side": "BUY", "qty": 5, "price": round(price, 2)})
     if st.button("SELL (Quick)", key="quick_sell"):
         st.session_state.trade_log.append({"time": datetime.now(), "side": "SELL", "qty": 5, "price": round(price, 2)})
+    st.markdown("</div>", unsafe_allow_html=True)
