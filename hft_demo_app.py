@@ -121,6 +121,24 @@ price = get_live_price()
 st.session_state.price_data.append((time.strftime('%H:%M:%S'), price, random.randint(10, 100)))
 df = pd.DataFrame(st.session_state.price_data, columns=['time', 'price', 'volume'])
 
+# Create OHLC for Candlestick
+candles = []
+for i in range(0, len(df), 3):
+    subset = df.iloc[i:i+3]
+    if len(subset) >= 3:
+        candles.append({
+            "time": subset["time"].iloc[-1],
+            "open": subset["price"].iloc[0],
+            "high": subset["price"].max(),
+            "low": subset["price"].min(),
+            "close": subset["price"].iloc[-1]
+        })
+candles_df = pd.DataFrame(candles)
+
+# Market Depth Simulation
+bid_size = random.randint(50, 200)
+ask_size = random.randint(50, 200)
+
 # Get AI Advice
 ai_signal, ai_text, forecast_price, confidence, metrics = ai_market_signal()
 if ai_signal != "HOLD" and forecast_price:
@@ -179,60 +197,27 @@ if st.session_state.show_modal:
         st.session_state.show_modal = False
     st.markdown("</div>", unsafe_allow_html=True)
 
-# ---------- Middle Panel (Charts and PnL) ----------
+# ---------- Middle Panel with Candlestick + Depth ----------
 with middle:
     st.markdown("<div class='panel'>", unsafe_allow_html=True)
-    st.markdown("<div style='font-size:22px;font-weight:bold;text-align:center;padding:12px;border-radius:8px;margin-bottom:15px;border:2px solid #FFD700;box-shadow:0 0 15px #FFD700,0 0 30px #FFD700;'>⚡ High-Frequency Trading Dashboard</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:22px;font-weight:bold;text-align:center;padding:12px;border-radius:8px;margin-bottom:15px;border:2px solid #FFD700;box-shadow:0 0 15px #FFD700,0 0 30px #FFD700;'>📊 Market Visualization</div>", unsafe_allow_html=True)
 
-    # Price vs Volume chart
-    fig = go.Figure()
-    fig.add_trace(go.Bar(x=df['time'], y=df['volume'], name='Volume', yaxis='y2', marker=dict(color='orange', opacity=0.5)))
-    fig.add_trace(go.Scatter(x=df['time'], y=df['price'], mode='lines+markers', name='Price', line=dict(color='lime', width=3)))
-    fig.update_layout(template="plotly_dark", xaxis=dict(title="Time"),
-                      yaxis=dict(title="Price"), yaxis2=dict(title="Volume", overlaying="y", side="right"), height=400)
-    st.plotly_chart(fig, use_container_width=True)
+    if not candles_df.empty:
+        candle_fig = go.Figure(data=[go.Candlestick(
+            x=candles_df['time'],
+            open=candles_df['open'],
+            high=candles_df['high'],
+            low=candles_df['low'],
+            close=candles_df['close'],
+            increasing_line_color='lime',
+            decreasing_line_color='red'
+        )])
+        candle_fig.update_layout(template="plotly_dark", height=400, title="Candlestick Chart")
+        st.plotly_chart(candle_fig, use_container_width=True)
 
-    # Trade Log
-    st.subheader("📜 Trade Log")
-    if st.session_state.trade_log:
-        st.dataframe(pd.DataFrame(st.session_state.trade_log))
-    else:
-        st.info("No trades yet.")
-
-# ---------- Trading Panel ----------
-with right:
-    st.markdown("<div class='panel'>", unsafe_allow_html=True)
-    st.markdown("<div style='font-size:22px;font-weight:bold;text-align:center;padding:12px;border-radius:8px;margin-bottom:15px;border:2px solid #FF00FF;box-shadow:0 0 15px #FF00FF,0 0 30px #FF00FF;'>🛠 Trading Panel</div>", unsafe_allow_html=True)
-
-    mode = st.radio("Mode", ["Simulation", "Live"])
-    side = st.radio("Side", ["BUY", "SELL"], index=0 if st.session_state.selected_side == "BUY" else 1)
-    qty = st.number_input("Quantity", min_value=1.0, step=1.0, value=1.0)
-    order_type = st.radio("Order Type", ["MARKET", "LIMIT"])
-    limit_price = st.number_input("Limit Price (USD)", value=st.session_state.limit_price, step=0.01)
-
-    if st.button("Submit Order"):
-        trade_price = price if order_type == "MARKET" else limit_price
-        st.session_state.trade_log.append({"time": time.strftime('%H:%M:%S'), "side": side, "qty": qty, "price": trade_price})
-        if side == "BUY":
-            st.session_state.positions.append({"qty": qty, "price": trade_price})
-        else:
-            if st.session_state.positions:
-                st.session_state.positions.pop(0)
-        st.success(f"Order placed: {side} {qty} @ {trade_price}")
-
-    if ai_signal != "HOLD" and forecast_price:
-        if st.button("🤖 Take AI Advice"):
-            st.session_state.trade_log.append({
-                "time": time.strftime('%H:%M:%S'),
-                "side": ai_signal,
-                "qty": qty,
-                "price": round(forecast_price, 2)
-            })
-            if ai_signal == "BUY":
-                st.session_state.positions.append({"qty": qty, "price": forecast_price})
-            else:
-                if st.session_state.positions:
-                    st.session_state.positions.pop(0)
-            st.success(f"✅ Executed AI Advice: {ai_signal} {qty} @ ${forecast_price:.2f}")
-
-    st.markdown("</div>", unsafe_allow_html=True)
+    # Market Depth
+    depth_fig = go.Figure()
+    depth_fig.add_trace(go.Bar(x=['Bid'], y=[bid_size], name='Bid', marker=dict(color='green')))
+    depth_fig.add_trace(go.Bar(x=['Ask'], y=[ask_size], name='Ask', marker=dict(color='red')))
+    depth_fig.update_layout(template="plotly_dark", height=250, title="Market Depth")
+    st.plotly_chart(depth_fig, use_container_width=True)
