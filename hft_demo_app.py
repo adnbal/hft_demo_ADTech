@@ -1,63 +1,72 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import random
-from datetime import datetime
+import numpy as np
 import time
+import plotly.graph_objects as go
+from streamlit_autorefresh import st_autorefresh
+from datetime import datetime
+import random
 
 # -------------------- PAGE CONFIG --------------------
-st.set_page_config(page_title="HFT AI Dashboard", layout="wide")
+st.set_page_config(page_title="AI HFT Dashboard", layout="wide")
 
 # -------------------- CUSTOM CSS --------------------
 st.markdown("""
     <style>
-    /* Push main content down so AI section doesn't overlap */
-    .block-container {
-        padding-top: 200px !important;
+    body {
+        background-color: #0f172a;
+        color: white;
     }
-
-    /* Fixed AI Intelligence Panel inside Streamlit container */
-    .fixed-ai {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        background: #0e1117;
-        z-index: 9999;
-        border-radius: 0 0 15px 15px;
+    .sidebar .sidebar-content {
+        background: #1e293b;
+    }
+    .neon-box {
+        border: 2px solid;
+        border-radius: 15px;
         padding: 15px;
-        text-align: left;
-        animation: neonPulse 1.5s infinite alternate;
-        box-shadow: 0 0 15px #39FF14;
+        text-align: center;
+        font-size: 18px;
+        animation: glow 1.5s infinite alternate;
     }
-
-    /* Neon Glow Animation */
-    @keyframes neonPulse {
-        from {
-            box-shadow: 0 0 15px #39FF14, 0 0 30px #39FF14;
-        }
-        to {
-            box-shadow: 0 0 30px #39FF14, 0 0 60px #39FF14;
-        }
+    @keyframes glow {
+        from { box-shadow: 0 0 10px #39ff14; }
+        to { box-shadow: 0 0 20px #39ff14; }
     }
-
-    .buy-signal {
-        color: #39FF14;
-        font-size: 22px;
+    .neon-sell {
+        animation: glow-red 1.5s infinite alternate;
+    }
+    @keyframes glow-red {
+        from { box-shadow: 0 0 10px #ff073a; }
+        to { box-shadow: 0 0 20px #ff073a; }
+    }
+    .buy-button {
+        background: #39ff14;
+        color: black;
         font-weight: bold;
-        text-shadow: 0 0 15px #39FF14;
+        border-radius: 10px;
+        padding: 10px 20px;
+        border: none;
+        box-shadow: 0 0 15px #39ff14;
     }
-    .sell-signal {
-        color: #FF3131;
-        font-size: 22px;
+    .buy-button:hover {
+        box-shadow: 0 0 30px #39ff14;
+    }
+    .sell-button {
+        background: #ff073a;
+        color: white;
         font-weight: bold;
-        text-shadow: 0 0 15px #FF3131;
+        border-radius: 10px;
+        padding: 10px 20px;
+        border: none;
+        box-shadow: 0 0 15px #ff073a;
+    }
+    .sell-button:hover {
+        box-shadow: 0 0 30px #ff073a;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# -------------------- SESSION STATE --------------------
+# -------------------- INITIALIZE SESSION STATE --------------------
 if "price_data" not in st.session_state:
     st.session_state.price_data = []
 if "trade_log" not in st.session_state:
@@ -65,113 +74,86 @@ if "trade_log" not in st.session_state:
 if "positions" not in st.session_state:
     st.session_state.positions = []
 
-# Simulate price and volume
-price = 30000 + random.uniform(-100, 100)
-volume = random.uniform(50, 200)
+# -------------------- AUTO REFRESH --------------------
+st_autorefresh(interval=5000, key="auto-refresh")
+
+# -------------------- PRICE SIMULATION --------------------
+price = 30000 + np.random.randn() * 50
+volume = random.randint(10, 100)
 st.session_state.price_data.append({"time": datetime.now(), "price": price, "volume": volume})
 
-# -------------------- AI SIGNAL --------------------
-price_trend = "UP" if random.choice([True, False]) else "DOWN"
-if price_trend == "UP":
-    ai_signal = "BUY"
-    ai_message = """
-    <p class='buy-signal'>Market Signal: BUY ✅</p>
-    - Trend: Bullish momentum detected.<br>
-    - Buyers dominate order flow.<br>
-    - Forecast: +0.8% possible upside in next few mins.<br>
-    - Volume indicates strong support.
-    """
-else:
-    ai_signal = "SELL"
-    ai_message = """
-    <p class='sell-signal'>Market Signal: SELL ❌</p>
-    - Trend: Bearish pressure building.<br>
-    - Sellers dominate order book.<br>
-    - Forecast: -0.7% downside likely.<br>
-    - Caution: Watch for resistance breaks.
-    """
+# -------------------- AI SIGNAL GENERATION --------------------
+recent_prices = [p["price"] for p in st.session_state.price_data[-10:]]
+signal = "HOLD"
+reason = "Insufficient data for prediction."
+forecast = ""
 
-# -------------------- FIXED AI PANEL --------------------
-st.markdown(f"<div class='fixed-ai'><h3>🤖 AI Market Intelligence</h3>{ai_message}</div>", unsafe_allow_html=True)
+if len(recent_prices) >= 10:
+    trend = np.polyfit(range(len(recent_prices)), recent_prices, 1)[0]
+    if trend > 0:
+        signal = "BUY"
+        reason = "Price trend is upward, indicating bullish momentum. Buyers dominate order flow."
+        forecast = "Price expected to rise by ~0.8% in next few minutes based on volatility patterns."
+    elif trend < 0:
+        signal = "SELL"
+        reason = "Price trend is downward, indicating bearish momentum. Sellers dominate order flow."
+        forecast = "Price likely to drop by ~0.7% in next few minutes due to negative trend."
+
+# -------------------- SIDEBAR AI PANEL --------------------
+st.sidebar.markdown("<h2 style='color:#39ff14;'>🤖 AI Market Intelligence</h2>", unsafe_allow_html=True)
+if signal == "BUY":
+    st.sidebar.markdown(f"<div class='neon-box'>{signal}</div>", unsafe_allow_html=True)
+else:
+    st.sidebar.markdown(f"<div class='neon-box neon-sell'>{signal}</div>", unsafe_allow_html=True)
+
+st.sidebar.write(reason)
+st.sidebar.write(forecast)
 
 # -------------------- MAIN DASHBOARD --------------------
-st.title("⚡ High Frequency Trading AI Dashboard")
-st.caption("Simulated BTC/USDT Trading with AI Insights")
+st.markdown("<h1 style='text-align:center;color:#39ff14;'>⚡ High Frequency Trading AI Dashboard</h1>", unsafe_allow_html=True)
 
-# -------------------- PRICE & VOLUME CHART --------------------
-st.subheader("📈 Live BTC Price & Volume")
-df = pd.DataFrame(st.session_state.price_data)
+col1, col2 = st.columns([2, 1])
 
-if not df.empty:
-    fig = make_subplots(specs=[[{"secondary_y": True}]])
-    # Price line
-    fig.add_trace(go.Scatter(x=df['time'], y=df['price'], mode='lines+markers',
-                             name='Price', line=dict(color='lime', width=3)),
-                  secondary_y=False)
-    # Volume bars
-    fig.add_trace(go.Bar(x=df['time'], y=df['volume'], name='Volume',
-                         marker=dict(color='rgba(0,150,255,0.5)')),
-                  secondary_y=True)
-    fig.update_layout(template="plotly_dark", height=400)
-    fig.update_yaxes(title_text="BTC Price (USD)", secondary_y=False)
-    fig.update_yaxes(title_text="Volume", secondary_y=True)
+with col1:
+    st.subheader("📈 Live BTC Price & Volume")
+    df = pd.DataFrame(st.session_state.price_data[-100:])
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=df["time"], y=df["price"], mode="lines+markers", name="Price", line=dict(color="lime", width=3)))
+    fig.add_trace(go.Bar(x=df["time"], y=df["volume"], name="Volume", marker_color="blue", opacity=0.3, yaxis="y2"))
+    fig.update_layout(
+        template="plotly_dark",
+        yaxis=dict(title="Price (USD)"),
+        yaxis2=dict(title="Volume", overlaying="y", side="right"),
+        height=400
+    )
     st.plotly_chart(fig, use_container_width=True)
 
+    # P&L Line Chart
+    st.subheader("📊 Realized & Unrealized P&L")
+    pnl = [random.uniform(-100, 150) for _ in range(len(df))]
+    fig_pnl = go.Figure()
+    fig_pnl.add_trace(go.Scatter(x=df["time"], y=pnl, mode="lines", name="P&L", line=dict(color="yellow", width=2)))
+    fig_pnl.update_layout(template="plotly_dark", height=300)
+    st.plotly_chart(fig_pnl, use_container_width=True)
+
+with col2:
+    st.subheader("📜 Trade Log")
+    trade_df = pd.DataFrame(st.session_state.trade_log)
+    if not trade_df.empty:
+        st.dataframe(trade_df.tail(10))
+    else:
+        st.write("No trades yet.")
+
+    st.subheader("📊 Portfolio Metrics")
+    st.table(pd.DataFrame({
+        "Metric": ["Open Position (BTC)", "Current Value (USD)", "Average Entry Price"],
+        "Value": ["0", "$0.00", "$0.00"]
+    }))
+
 # -------------------- TRADING PANEL --------------------
-st.subheader("🛠 Trading Panel")
-col1, col2, col3, col4 = st.columns(4)
-mode = col1.radio("Mode", ["Simulation", "Live"])
-side = col2.radio("Side", ["BUY", "SELL"])
-qty = col3.number_input("Quantity", min_value=1, value=5)
-order_type = col4.radio("Order Type", ["MARKET", "LIMIT"])
-limit_price = st.number_input("Limit Price", min_value=0.0, value=price)
-
-if st.button("Submit Order"):
-    trade_price = limit_price if order_type == "LIMIT" else price
-    st.session_state.trade_log.append({
-        "time": datetime.now(), "side": side, "qty": qty, "price": trade_price
-    })
-    if side == "BUY":
-        st.session_state.positions.append({"price": trade_price, "qty": qty})
-    elif side == "SELL" and st.session_state.positions:
-        st.session_state.positions.pop(0)
-
-# -------------------- TRADE LOG --------------------
-st.subheader("📜 Trade Log")
-df_trades = pd.DataFrame(st.session_state.trade_log)
-if not df_trades.empty:
-    st.dataframe(df_trades.tail(10))
-else:
-    st.info("No trades yet.")
-
-# -------------------- P&L --------------------
-st.subheader("📊 Realized & Unrealized P&L")
-realized_pnl = 0.0
-unrealized_pnl = 0.0
-current_price = price
-for pos in st.session_state.positions:
-    unrealized_pnl += (current_price - pos["price"]) * pos["qty"]
-
-pnl_df = pd.DataFrame({"Type": ["Realized", "Unrealized"], "Value": [realized_pnl, unrealized_pnl]})
-st.bar_chart(pnl_df.set_index("Type"))
-
-# -------------------- P&L TREND --------------------
-if not df_trades.empty:
-    df_trades['PnL'] = (df_trades['price'] - df_trades['price'].shift(1)).fillna(0).cumsum()
-    st.line_chart(df_trades.set_index('time')['PnL'])
-
-# -------------------- PORTFOLIO METRICS --------------------
-st.subheader("📊 Portfolio Metrics")
-open_position = sum([p["qty"] for p in st.session_state.positions])
-avg_price = sum([p["price"] * p["qty"] for p in st.session_state.positions]) / open_position if open_position > 0 else 0
-current_value = open_position * current_price
-metrics_df = pd.DataFrame({
-    "Metric": ["Open Position (BTC)", "Current Value (USD)", "Average Entry Price"],
-    "Value": [open_position, f"${current_value:,.2f}", f"${avg_price:,.2f}"]
-})
-st.table(metrics_df)
-
-# -------------------- AUTO REFRESH --------------------
-st.caption("Refreshing every 5 seconds...")
-time.sleep(5)
-st.rerun()
+st.markdown("### 🛠 Trading Panel")
+colA, colB, colC = st.columns([1, 1, 1])
+with colA:
+    st.button("BUY", key="buy", help="Place BUY order", use_container_width=True)
+with colB:
+    st.button("SELL", key="sell", help="Place SELL order", use_container_width=True)
