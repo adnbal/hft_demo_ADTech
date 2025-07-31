@@ -4,14 +4,13 @@ import plotly.graph_objects as go
 import requests
 import time
 import random
-from datetime import datetime, timedelta
 from streamlit_autorefresh import st_autorefresh
 
 # ---------- Page Config ----------
 st.set_page_config(page_title="HFT Dashboard", layout="wide")
 
-# ---------- Auto-refresh ----------
-st_autorefresh(interval=5000, key="refresh")
+# ---------- Auto-refresh every 15s ----------
+st_autorefresh(interval=15000, key="refresh")
 
 # ---------- Custom CSS ----------
 st.markdown("""
@@ -62,26 +61,21 @@ if "unrealized_history" not in st.session_state:
 if "show_modal" not in st.session_state:
     st.session_state.show_modal = False
 
-# ---------- CoinGecko API ----------
-def get_crypto_price(symbol="bitcoin"):
-    url = f"https://api.coingecko.com/api/v3/simple/price?ids={symbol}&vs_currencies=usd"
+# ---------- CoinGecko API (one request for all coins) ----------
+def get_multiple_crypto_prices(symbols):
+    ids = ",".join(symbols)
+    url = f"https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies=usd"
     try:
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
-            data = response.json()
-            return float(data[symbol]["usd"])
+            return response.json()
         else:
-            st.warning(f"API Error {response.status_code} for {symbol}")
+            st.warning(f"API Error {response.status_code}")
     except Exception as e:
-        st.error(f"Error fetching {symbol}: {e}")
-    # Fallback mock price
-    return 30000 + random.uniform(-200, 200)
+        st.error(f"Error fetching prices: {e}")
+    return {}
 
-# Main asset (BTC)
-price = get_crypto_price("bitcoin")
-
-# Crypto list for ticker
-crypto_assets = {
+crypto_ids = {
     "BTC": "bitcoin",
     "ETH": "ethereum",
     "BNB": "binancecoin",
@@ -89,7 +83,13 @@ crypto_assets = {
     "XRP": "ripple"
 }
 
-ticker_prices = {k: get_crypto_price(v) for k, v in crypto_assets.items()}
+data = get_multiple_crypto_prices(list(crypto_ids.values()))
+
+# Main price (BTC)
+price = float(data.get("bitcoin", {}).get("usd", 30000))
+
+# Ticker prices
+ticker_prices = {symbol: float(data.get(cg_id, {}).get("usd", 30000)) for symbol, cg_id in crypto_ids.items()}
 
 # ---------- AI Market Signal ----------
 def ai_market_signal():
@@ -107,7 +107,7 @@ def ai_market_signal():
 # ---------- Ticker Bar ----------
 ticker_html = "<div class='ticker-container'><div class='ticker-text'>"
 for asset, val in ticker_prices.items():
-    change = random.uniform(-1.5, 1.5)  # mock % change for ticker
+    change = random.uniform(-1.5, 1.5)  # mock % change for ticker animation
     color_class = "price-up" if change >= 0 else "price-down"
     ticker_html += f"&nbsp;&nbsp;{asset}: <span class='{color_class}'>{val:.2f}</span> ({change:+.2f}%)&nbsp;&nbsp;|"
 ticker_html += "</div></div>"
