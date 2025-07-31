@@ -6,6 +6,7 @@ import threading
 import websocket
 import plotly.graph_objects as go
 from streamlit_autorefresh import st_autorefresh
+import requests
 import time
 
 # ✅ Page Config
@@ -16,14 +17,12 @@ st.title("⚡ Advanced High-Frequency Trading Prototype (Binance Testnet)")
 st.sidebar.header("⚙️ Settings")
 refresh_interval = st.sidebar.slider("Refresh Interval (seconds)", 1, 5, 2)
 
-# ✅ Auto-refresh for UI updates
+# ✅ Auto-refresh UI
 st_autorefresh(interval=refresh_interval * 1000, key="refresh")
 
 # ✅ Initialize Session State
 if "price_data" not in st.session_state:
     st.session_state.price_data = []
-if "order_book" not in st.session_state:
-    st.session_state.order_book = {"bids": [], "asks": []}
 if "trade_log" not in st.session_state:
     st.session_state.trade_log = []
 if "pnl" not in st.session_state:
@@ -33,33 +32,25 @@ if "pending_order" not in st.session_state:
 if "last_data_time" not in st.session_state:
     st.session_state.last_data_time = time.time()
 
-# ✅ Binance Testnet WebSocket URLs
+# ✅ Binance API URLs
 TRADE_WS = "wss://testnet.binance.vision/ws/btcusdt@trade"
-DEPTH_WS = "wss://testnet.binance.vision/ws/btcusdt@depth5@100ms"
+ORDER_BOOK_API = "https://testnet.binance.vision/api/v3/depth?symbol=BTCUSDT&limit=5"
 
-# ✅ WebSocket Callbacks
+# ✅ WebSocket Callbacks for Price
 def on_trade(ws, message):
     data = json.loads(message)
     price = float(data['p'])
     st.session_state.price_data.append({"time": pd.Timestamp.now(), "price": price})
     st.session_state.last_data_time = time.time()
 
-def on_depth(ws, message):
-    data = json.loads(message)
-    bids = [(float(b[0]), float(b[1])) for b in data["bids"]]
-    asks = [(float(a[0]), float(a[1])) for a in data["asks"]]
-    st.session_state.order_book = {"bids": bids, "asks": asks}
-
 def start_ws():
     try:
         ws_trade = websocket.WebSocketApp(TRADE_WS, on_message=on_trade)
-        ws_depth = websocket.WebSocketApp(DEPTH_WS, on_message=on_depth)
         threading.Thread(target=ws_trade.run_forever, daemon=True).start()
-        threading.Thread(target=ws_depth.run_forever, daemon=True).start()
     except Exception as e:
         print(f"WebSocket error: {e}")
 
-# ✅ Reconnect if no data for 5 seconds
+# ✅ Reconnect WebSocket if dead
 if time.time() - st.session_state.last_data_time > 5:
     st.sidebar.warning("Reconnecting WebSocket...")
     start_ws()
@@ -69,15 +60,25 @@ if "ws_started" not in st.session_state:
     start_ws()
     st.session_state.ws_started = True
 
+# ✅ Get Real Order Book from Binance REST API
+def fetch_order_book():
+    try:
+        response = requests.get(ORDER_BOOK_API, timeout=3)
+        if response.status_code == 200:
+            data = response.json()
+            bids = [(float(price), float(qty)) for price, qty in data["bids"]]
+            asks = [(float(price), float(qty)) for price, qty in data["asks"]]
+            return bids, asks
+    except:
+        return [], []
+
+bids, asks = fetch_order_book()
+
 # ✅ Market-Making Simulation
 def market_maker():
     if len(st.session_state.price_data) < 1:
-        # Inject simulated price if no WebSocket data
-        if "dummy_counter" not in st.session_state:
-            st.session_state.dummy_counter = 0
-        st.session_state.dummy_counter += 1
-        if st.session_state.dummy_counter > 3:
-            st.session_state.price_data.append({"time": pd.Timestamp.now(), "price": 100000.0})
+        # Inject dummy price if WebSocket is slow
+        st.session_state.price_data.append({"time": pd.Timestamp.now(), "price": 100000.0})
         return
 
     latest_price = st.session_state.price_data[-1]["price"]
@@ -155,20 +156,19 @@ with col1:
     else:
         st.info("⏳ Waiting for price data from Binance Testnet...")
 
-# ✅ Order Book Visualization
+# ✅ Order Book Visualization (Real via REST)
 with col2:
     st.subheader("📊 Order Book Depth")
-    ob = st.session_state.order_book
-    if ob["bids"] and ob["asks"]:
-        bid_prices, bid_qty = zip(*ob["bids"])
-        ask_prices, ask_qty = zip(*ob["asks"])
+    if bids and asks:
+        bid_prices, bid_qty = zip(*bids)
+        ask_prices, ask_qty = zip(*asks)
         fig_ob = go.Figure()
         fig_ob.add_trace(go.Bar(x=bid_prices, y=bid_qty, name="Bids", marker_color="green"))
         fig_ob.add_trace(go.Bar(x=ask_prices, y=ask_qty, name="Asks", marker_color="red"))
         fig_ob.update_layout(barmode="overlay", title="Order Book Depth", xaxis_title="Price", yaxis_title="Qty")
         st.plotly_chart(fig_ob, use_container_width=True)
     else:
-        st.info("⏳ Waiting for order book data...")
+        st.info("⏳ Fetching order book data...")
 
 # ✅ Trade Log and P&L
 st.subheader("📜 Trade Log & P&L")
