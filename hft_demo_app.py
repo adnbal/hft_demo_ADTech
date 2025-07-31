@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import time
 from datetime import datetime
+import plotly.graph_objects as go
 import plotly.express as px
 
 # ---------------------- PAGE CONFIG ----------------------
@@ -17,6 +18,8 @@ if 'trade_log' not in st.session_state:
     st.session_state.trade_log = []
 if 'position' not in st.session_state:
     st.session_state.position = 0
+if 'realized_pnl' not in st.session_state:
+    st.session_state.realized_pnl = 0
 if 'pnl_history' not in st.session_state:
     st.session_state.pnl_history = []
 
@@ -31,20 +34,28 @@ price_input = st.sidebar.number_input("Limit Price", min_value=10000.0, value=30
 # ---------------------- PRICE SIMULATION ----------------------
 def get_live_price():
     base_price = 30000
-    return round(base_price + np.random.randn() * 100, 2)
+    price = round(base_price + np.random.randn() * 100, 2)
+    bid = price - np.random.uniform(10, 15)
+    ask = price + np.random.uniform(10, 15)
+    return price, bid, ask
 
-# Update price list
-current_price = get_live_price()
-st.session_state.price_data.append({"time": datetime.now(), "price": current_price})
+current_price, bid_price, ask_price = get_live_price()
+st.session_state.price_data.append({"time": datetime.now(), "price": current_price, "bid": bid_price, "ask": ask_price})
 
 # ---------------------- FUNCTIONS ----------------------
 def update_positions(side, qty, trade_price):
     if side == "BUY":
         st.session_state.position += qty
+        st.session_state.realized_pnl -= qty * trade_price
     elif side == "SELL":
         st.session_state.position -= qty
-    pnl = st.session_state.position * trade_price
-    st.session_state.pnl_history.append({"time": datetime.now(), "pnl": pnl})
+        st.session_state.realized_pnl += qty * trade_price
+    unrealized = st.session_state.position * current_price
+    st.session_state.pnl_history.append({
+        "time": datetime.now(),
+        "realized": st.session_state.realized_pnl,
+        "unrealized": unrealized
+    })
 
 # ---------------------- EXECUTE ORDER ----------------------
 if st.sidebar.button("Submit Order"):
@@ -64,13 +75,17 @@ if st.sidebar.button("Submit Order"):
 # ---------------------- MAIN LAYOUT ----------------------
 col1, col2 = st.columns(2)
 
-# ✅ PRICE CHART
+# ✅ PRICE & BID-ASK CHART
 with col1:
-    st.subheader("📈 Live BTC Price")
+    st.subheader("📈 Live BTC Price & Spread")
     if len(st.session_state.price_data) > 0:
         df_price = pd.DataFrame(st.session_state.price_data[-100:])
-        fig_price = px.line(df_price, x="time", y="price", title="BTC/USDT Price Trend")
-        st.plotly_chart(fig_price, use_container_width=True)
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=df_price["time"], y=df_price["price"], mode="lines", name="Mid Price", line=dict(color="blue")))
+        fig.add_trace(go.Scatter(x=df_price["time"], y=df_price["bid"], mode="lines", name="Bid", line=dict(color="green", dash="dot")))
+        fig.add_trace(go.Scatter(x=df_price["time"], y=df_price["ask"], mode="lines", name="Ask", line=dict(color="red", dash="dot")))
+        fig.update_layout(title="BTC/USDT Price with Bid-Ask Spread", xaxis_title="Time", yaxis_title="Price (USD)")
+        st.plotly_chart(fig, use_container_width=True)
     else:
         st.write("Waiting for price data...")
 
@@ -89,7 +104,6 @@ st.subheader("🤖 AI Recommendation")
 if len(st.session_state.price_data) >= 2:
     last_price = st.session_state.price_data[-1]["price"]
     prev_price = st.session_state.price_data[-2]["price"]
-
     if last_price > prev_price:
         rec = "Market is bullish 📈 → Consider BUY"
     elif last_price < prev_price:
@@ -110,10 +124,13 @@ st.metric("Open Position (BTC)", f"{current_position:.4f}")
 st.metric("Current Value (USD)", f"${current_value:,.2f}")
 st.metric("Average Entry Price", f"${avg_price:,.2f}")
 
-# ---------------------- PNL CHART ----------------------
+# ---------------------- PNL CHART WITH TWO LINES ----------------------
 if len(st.session_state.pnl_history) > 0:
     df_pnl = pd.DataFrame(st.session_state.pnl_history)
-    fig_pnl = px.line(df_pnl, x="time", y="pnl", title="PnL Over Time")
+    fig_pnl = go.Figure()
+    fig_pnl.add_trace(go.Scatter(x=df_pnl["time"], y=df_pnl["realized"], mode="lines", name="Realized PnL", line=dict(color="green")))
+    fig_pnl.add_trace(go.Scatter(x=df_pnl["time"], y=df_pnl["unrealized"], mode="lines", name="Unrealized PnL", line=dict(color="yellow")))
+    fig_pnl.update_layout(title="Realized vs Unrealized PnL", xaxis_title="Time", yaxis_title="PnL (USD)")
     st.plotly_chart(fig_pnl, use_container_width=True)
 
 # ---------------------- AUTO REFRESH ----------------------
