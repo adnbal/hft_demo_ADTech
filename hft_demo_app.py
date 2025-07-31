@@ -3,15 +3,16 @@ import pandas as pd
 import plotly.graph_objects as go
 import random
 import time
+from datetime import datetime, timedelta
 from streamlit_autorefresh import st_autorefresh
 
 # ---------- Page Config ----------
 st.set_page_config(page_title="HFT Dashboard", layout="wide")
 
-# ---------- Auto-refresh ----------
+# ---------- Auto-refresh every 5 seconds ----------
 st_autorefresh(interval=5000, key="refresh")
 
-# ---------- Custom CSS for Neon & Ticker ----------
+# ---------- Custom CSS ----------
 st.markdown("""
     <style>
         body {
@@ -88,18 +89,28 @@ assets = {
     "AMZN": 135 + random.uniform(-1, 1)
 }
 
-# ---------- AI Signal ----------
+# ---------- AI Market Signal with Reason ----------
 def ai_market_signal():
     if len(st.session_state.price_data) < 10:
         return "HOLD", "Collecting more data for better prediction."
     prices = [p[1] for p in st.session_state.price_data[-10:]]
+    volumes = [p[2] for p in st.session_state.price_data[-10:]]
     trend = (prices[-1] - prices[0]) / prices[0]
+    avg_volume = sum(volumes) / len(volumes)
+    current_volume = volumes[-1]
+
     if trend > 0.002:
-        return "BUY", f"Market Signal: BUY. Price trend is upward, strong bullish momentum. Expect +0.8% rise in short term."
+        reason = "Price trend is bullish with strong upward momentum."
+        if current_volume > avg_volume:
+            reason += " Volume is above average, indicating strong buying interest."
+        return "BUY", reason + " Consider entering a long position."
     elif trend < -0.002:
-        return "SELL", f"Market Signal: SELL. Price trend is downward, bearish momentum. Expect -0.8% fall soon."
+        reason = "Downward trend detected with selling pressure."
+        if current_volume > avg_volume:
+            reason += " Volume spike suggests heavy selling activity."
+        return "SELL", reason + " Short positions may benefit."
     else:
-        return "HOLD", "Market is neutral. Wait for a clear trend."
+        return "HOLD", "Market appears neutral. No significant price movement. Best to wait for clarity."
 
 # ---------- Ticker Bar ----------
 ticker_html = "<div class='ticker-container'><div class='ticker-text'>"
@@ -154,7 +165,7 @@ with middle:
     else:
         st.info("No trades yet.")
 
-    # PnL Chart
+    # Calculate Realized PnL & Total Profit
     pnl = []
     cum_pnl = 0
     open_positions = []
@@ -177,10 +188,64 @@ with middle:
                         qty_to_sell = 0
         pnl.append(cum_pnl)
 
-    pnl_fig = go.Figure()
-    pnl_fig.add_trace(go.Scatter(x=[t["time"] for t in st.session_state.trade_log], y=pnl, mode='lines', name='PnL', line=dict(color='cyan')))
-    pnl_fig.update_layout(template="plotly_dark", title="📊 Realized PnL", height=300)
-    st.plotly_chart(pnl_fig, use_container_width=True)
+    # Total Profit Counter
+    st.markdown(f"""
+        <div style='text-align:center;font-size:30px;font-weight:bold;margin:20px;
+        padding:15px;border-radius:10px;background:#111;border:3px solid white;
+        box-shadow:0 0 20px #39ff14,0 0 40px #39ff14;color:#39ff14;'>
+        💰 TOTAL PROFIT: {cum_pnl:.2f} USD
+        </div>
+    """, unsafe_allow_html=True)
+
+    # Realized PnL Chart
+    if st.session_state.trade_log:
+        pnl_fig = go.Figure()
+        pnl_fig.add_trace(go.Scatter(x=[t["time"] for t in st.session_state.trade_log], y=pnl,
+                                     mode='lines', name='PnL', line=dict(color='cyan')))
+        pnl_fig.update_layout(template="plotly_dark", title="📊 Realized PnL", height=300)
+        st.plotly_chart(pnl_fig, use_container_width=True)
+
+    # Cumulative PnL for Last 5 Hours
+    now = datetime.now()
+    five_hours_ago = now - timedelta(hours=5)
+    trade_times = []
+    cumulative_pnl = []
+    cum_pnl_5h = 0
+    open_positions_5h = []
+
+    for trade in st.session_state.trade_log:
+        trade_time = datetime.strptime(trade["time"], "%H:%M:%S")
+        trade_time = datetime.combine(now.date(), trade_time.time())
+        if trade_time >= five_hours_ago:
+            if trade["side"] == "BUY":
+                open_positions_5h.append((trade["qty"], trade["price"]))
+                cum_pnl_5h -= trade["qty"] * trade["price"]
+            else:
+                if open_positions_5h:
+                    qty_to_sell = trade["qty"]
+                    while qty_to_sell > 0 and open_positions_5h:
+                        qty_open, price_open = open_positions_5h[0]
+                        if qty_open <= qty_to_sell:
+                            cum_pnl_5h += qty_open * trade["price"]
+                            qty_to_sell -= qty_open
+                            open_positions_5h.pop(0)
+                        else:
+                            cum_pnl_5h += qty_to_sell * trade["price"]
+                            open_positions_5h[0] = (qty_open - qty_to_sell, price_open)
+                            qty_to_sell = 0
+            trade_times.append(trade_time)
+            cumulative_pnl.append(cum_pnl_5h)
+
+    if trade_times:
+        cum_pnl_fig = go.Figure()
+        cum_pnl_fig.add_trace(go.Scatter(x=trade_times, y=cumulative_pnl,
+                                         mode='lines+markers', name='Cumulative PnL',
+                                         line=dict(color='orange')))
+        cum_pnl_fig.update_layout(template="plotly_dark", title="💰 Cumulative Profit (Last 5 Hours)",
+                                   xaxis_title="Time", yaxis_title="PnL (USD)", height=300)
+        st.plotly_chart(cum_pnl_fig, use_container_width=True)
+    else:
+        st.info("No trades in the last 5 hours.")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
