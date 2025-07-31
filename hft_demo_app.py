@@ -62,17 +62,14 @@ if "unrealized_history" not in st.session_state:
 if "show_modal" not in st.session_state:
     st.session_state.show_modal = False
 
-# ---------- Binance API (with fallback) ----------
-def get_binance_price(symbol="BTCUSDT"):
-    url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
+# ---------- CoinGecko API ----------
+def get_crypto_price(symbol="bitcoin"):
+    url = f"https://api.coingecko.com/api/v3/simple/price?ids={symbol}&vs_currencies=usd"
     try:
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
             data = response.json()
-            if "price" in data:
-                return float(data["price"])
-            else:
-                st.warning(f"Unexpected response for {symbol}: {data}")
+            return float(data[symbol]["usd"])
         else:
             st.warning(f"API Error {response.status_code} for {symbol}")
     except Exception as e:
@@ -80,14 +77,19 @@ def get_binance_price(symbol="BTCUSDT"):
     # Fallback mock price
     return 30000 + random.uniform(-200, 200)
 
-# Get main asset price (BTC/USDT)
-price = get_binance_price("BTCUSDT")
+# Main asset (BTC)
+price = get_crypto_price("bitcoin")
 
-# ---------- Ticker Prices ----------
-assets = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "ADAUSDT", "XRPUSDT"]
-ticker_prices = {}
-for asset in assets:
-    ticker_prices[asset] = get_binance_price(asset)
+# Crypto list for ticker
+crypto_assets = {
+    "BTC": "bitcoin",
+    "ETH": "ethereum",
+    "BNB": "binancecoin",
+    "ADA": "cardano",
+    "XRP": "ripple"
+}
+
+ticker_prices = {k: get_crypto_price(v) for k, v in crypto_assets.items()}
 
 # ---------- AI Market Signal ----------
 def ai_market_signal():
@@ -96,16 +98,16 @@ def ai_market_signal():
     prices = [p[1] for p in st.session_state.price_data[-10:]]
     trend = (prices[-1] - prices[0]) / prices[0]
     if trend > 0.002:
-        return "BUY", "Bullish trend detected. Strong upward momentum with potential breakout."
+        return "BUY", "Bullish trend detected. Upward momentum strong."
     elif trend < -0.002:
-        return "SELL", "Bearish trend detected. Downward momentum indicates possible decline."
+        return "SELL", "Bearish trend detected. Downward momentum likely."
     else:
-        return "HOLD", "Neutral market. No clear direction yet."
+        return "HOLD", "Market neutral. No strong signal."
 
 # ---------- Ticker Bar ----------
 ticker_html = "<div class='ticker-container'><div class='ticker-text'>"
 for asset, val in ticker_prices.items():
-    change = random.uniform(-1.5, 1.5)  # mock % change
+    change = random.uniform(-1.5, 1.5)  # mock % change for ticker
     color_class = "price-up" if change >= 0 else "price-down"
     ticker_html += f"&nbsp;&nbsp;{asset}: <span class='{color_class}'>{val:.2f}</span> ({change:+.2f}%)&nbsp;&nbsp;|"
 ticker_html += "</div></div>"
@@ -146,7 +148,7 @@ if st.session_state.show_modal:
             <h2 style="color:#39ff14;">AI Market Forecast Details</h2>
             <p><b>Signal:</b> {ai_signal}</p>
             <p><b>Reason:</b> {ai_text}</p>
-            <p>🔍 Analysis based on price momentum and trend evaluation.</p>
+            <p>🔍 Based on last 10 interval price trends and market momentum.</p>
             <button onclick="document.getElementById('myModal').style.display='none';"
                 style="margin-top: 15px; background:#39ff14; color:black; padding:10px 20px; border:none; border-radius:5px; font-weight:bold;">
                 Close
@@ -166,7 +168,7 @@ with middle:
     # Price Chart
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=df['time'], y=df['price'], mode='lines+markers', name='Price', line=dict(color='lime')))
-    fig.update_layout(template="plotly_dark", xaxis=dict(title="Time"), yaxis=dict(title="Price (USDT)"), height=400)
+    fig.update_layout(template="plotly_dark", xaxis=dict(title="Time"), yaxis=dict(title="Price (USD)"), height=400)
     st.plotly_chart(fig, use_container_width=True)
 
     # Total Profit & PnL
@@ -194,7 +196,7 @@ with middle:
         <div style='text-align:center;font-size:30px;font-weight:bold;margin:20px;
         padding:15px;border-radius:10px;background:#111;border:3px solid white;
         box-shadow:0 0 20px #39ff14,0 0 40px #39ff14;color:#39ff14;'>
-        💰 TOTAL PROFIT: {cum_pnl:.2f} USDT
+        💰 TOTAL PROFIT: {cum_pnl:.2f} USD
         </div>
     """, unsafe_allow_html=True)
 
@@ -217,7 +219,7 @@ with middle:
         <div style='text-align:center;font-size:22px;font-weight:bold;margin:10px;
         padding:10px;border-radius:8px;background:#111;border:2px solid {unrealized_color};
         box-shadow:0 0 15px {unrealized_color};color:{unrealized_color};'>
-        Unrealized PnL: {current_unrealized:.2f} USDT
+        Unrealized PnL: {current_unrealized:.2f} USD
         </div>
     """, unsafe_allow_html=True)
 
