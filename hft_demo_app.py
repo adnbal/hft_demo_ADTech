@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import requests
 import time
+import random
 from datetime import datetime, timedelta
 from streamlit_autorefresh import st_autorefresh
 
@@ -61,14 +62,25 @@ if "unrealized_history" not in st.session_state:
 if "show_modal" not in st.session_state:
     st.session_state.show_modal = False
 
-# ---------- Binance API ----------
+# ---------- Binance API (with fallback) ----------
 def get_binance_price(symbol="BTCUSDT"):
     url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
-    response = requests.get(url)
-    data = response.json()
-    return float(data["price"])
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if "price" in data:
+                return float(data["price"])
+            else:
+                st.warning(f"Unexpected response for {symbol}: {data}")
+        else:
+            st.warning(f"API Error {response.status_code} for {symbol}")
+    except Exception as e:
+        st.error(f"Error fetching {symbol}: {e}")
+    # Fallback mock price
+    return 30000 + random.uniform(-200, 200)
 
-# Get real-time main asset price (BTC/USDT)
+# Get main asset price (BTC/USDT)
 price = get_binance_price("BTCUSDT")
 
 # ---------- Ticker Prices ----------
@@ -84,16 +96,16 @@ def ai_market_signal():
     prices = [p[1] for p in st.session_state.price_data[-10:]]
     trend = (prices[-1] - prices[0]) / prices[0]
     if trend > 0.002:
-        return "BUY", "Bullish trend detected with upward momentum and positive market bias."
+        return "BUY", "Bullish trend detected. Strong upward momentum with potential breakout."
     elif trend < -0.002:
-        return "SELL", "Bearish trend detected, possible downside risk."
+        return "SELL", "Bearish trend detected. Downward momentum indicates possible decline."
     else:
-        return "HOLD", "Market neutral, low conviction for trend direction."
+        return "HOLD", "Neutral market. No clear direction yet."
 
 # ---------- Ticker Bar ----------
 ticker_html = "<div class='ticker-container'><div class='ticker-text'>"
 for asset, val in ticker_prices.items():
-    change = round(((val - price) / price) * 100, 2)
+    change = random.uniform(-1.5, 1.5)  # mock % change
     color_class = "price-up" if change >= 0 else "price-down"
     ticker_html += f"&nbsp;&nbsp;{asset}: <span class='{color_class}'>{val:.2f}</span> ({change:+.2f}%)&nbsp;&nbsp;|"
 ticker_html += "</div></div>"
@@ -134,7 +146,7 @@ if st.session_state.show_modal:
             <h2 style="color:#39ff14;">AI Market Forecast Details</h2>
             <p><b>Signal:</b> {ai_signal}</p>
             <p><b>Reason:</b> {ai_text}</p>
-            <p>🔍 Based on price momentum and last 10 interval trend analysis.</p>
+            <p>🔍 Analysis based on price momentum and trend evaluation.</p>
             <button onclick="document.getElementById('myModal').style.display='none';"
                 style="margin-top: 15px; background:#39ff14; color:black; padding:10px 20px; border:none; border-radius:5px; font-weight:bold;">
                 Close
@@ -151,7 +163,7 @@ with middle:
 
     df = pd.DataFrame(st.session_state.price_data, columns=['time', 'price', 'volume'])
 
-    # Price & Volume Chart
+    # Price Chart
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=df['time'], y=df['price'], mode='lines+markers', name='Price', line=dict(color='lime')))
     fig.update_layout(template="plotly_dark", xaxis=dict(title="Time"), yaxis=dict(title="Price (USDT)"), height=400)
@@ -183,6 +195,29 @@ with middle:
         padding:15px;border-radius:10px;background:#111;border:3px solid white;
         box-shadow:0 0 20px #39ff14,0 0 40px #39ff14;color:#39ff14;'>
         💰 TOTAL PROFIT: {cum_pnl:.2f} USDT
+        </div>
+    """, unsafe_allow_html=True)
+
+    if pnl:
+        pnl_fig = go.Figure()
+        pnl_fig.add_trace(go.Scatter(x=[t["time"] for t in st.session_state.trade_log], y=pnl,
+                                     mode='lines', name='Realized PnL', line=dict(color='cyan')))
+        pnl_fig.update_layout(template="plotly_dark", title="📊 Realized PnL", height=300)
+        st.plotly_chart(pnl_fig, use_container_width=True)
+
+    # Unrealized PnL
+    current_unrealized = 0
+    if st.session_state.positions:
+        for pos in st.session_state.positions:
+            current_unrealized += (price - pos["price"]) * pos["qty"]
+    st.session_state.unrealized_history.append(current_unrealized)
+    st.session_state.unrealized_time.append(time.strftime('%H:%M:%S'))
+    unrealized_color = "#39ff14" if current_unrealized >= 0 else "#ff073a"
+    st.markdown(f"""
+        <div style='text-align:center;font-size:22px;font-weight:bold;margin:10px;
+        padding:10px;border-radius:8px;background:#111;border:2px solid {unrealized_color};
+        box-shadow:0 0 15px {unrealized_color};color:{unrealized_color};'>
+        Unrealized PnL: {current_unrealized:.2f} USDT
         </div>
     """, unsafe_allow_html=True)
 
