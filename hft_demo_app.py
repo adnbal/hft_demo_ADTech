@@ -4,13 +4,9 @@ import plotly.graph_objects as go
 import requests
 import time
 import random
-from streamlit_autorefresh import st_autorefresh
 
 # ---------- Page Config ----------
 st.set_page_config(page_title="HFT Dashboard", layout="wide")
-
-# ---------- Auto-refresh every 15s ----------
-st_autorefresh(interval=15000, key="refresh")
 
 # ---------- Custom CSS ----------
 st.markdown("""
@@ -61,35 +57,31 @@ if "unrealized_history" not in st.session_state:
 if "show_modal" not in st.session_state:
     st.session_state.show_modal = False
 
-# ---------- CoinGecko API (one request for all coins) ----------
-def get_multiple_crypto_prices(symbols):
-    ids = ",".join(symbols)
-    url = f"https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies=usd"
+# ---------- Cached CoinGecko API ----------
+@st.cache_data(ttl=60)
+def get_crypto_prices():
+    url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,binancecoin,cardano,ripple&vs_currencies=usd"
     try:
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
             return response.json()
-        else:
-            st.warning(f"API Error {response.status_code}")
-    except Exception as e:
-        st.error(f"Error fetching prices: {e}")
+    except:
+        pass
     return {}
 
-crypto_ids = {
-    "BTC": "bitcoin",
-    "ETH": "ethereum",
-    "BNB": "binancecoin",
-    "ADA": "cardano",
-    "XRP": "ripple"
-}
-
-data = get_multiple_crypto_prices(list(crypto_ids.values()))
+data = get_crypto_prices()
 
 # Main price (BTC)
 price = float(data.get("bitcoin", {}).get("usd", 30000))
 
 # Ticker prices
-ticker_prices = {symbol: float(data.get(cg_id, {}).get("usd", 30000)) for symbol, cg_id in crypto_ids.items()}
+ticker_prices = {
+    "BTC": float(data.get("bitcoin", {}).get("usd", 30000)),
+    "ETH": float(data.get("ethereum", {}).get("usd", 2000)),
+    "BNB": float(data.get("binancecoin", {}).get("usd", 300)),
+    "ADA": float(data.get("cardano", {}).get("usd", 0.5)),
+    "XRP": float(data.get("ripple", {}).get("usd", 0.7))
+}
 
 # ---------- AI Market Signal ----------
 def ai_market_signal():
@@ -107,7 +99,7 @@ def ai_market_signal():
 # ---------- Ticker Bar ----------
 ticker_html = "<div class='ticker-container'><div class='ticker-text'>"
 for asset, val in ticker_prices.items():
-    change = random.uniform(-1.5, 1.5)  # mock % change for ticker animation
+    change = random.uniform(-1.5, 1.5)  # mock % change
     color_class = "price-up" if change >= 0 else "price-down"
     ticker_html += f"&nbsp;&nbsp;{asset}: <span class='{color_class}'>{val:.2f}</span> ({change:+.2f}%)&nbsp;&nbsp;|"
 ticker_html += "</div></div>"
@@ -200,14 +192,7 @@ with middle:
         </div>
     """, unsafe_allow_html=True)
 
-    if pnl:
-        pnl_fig = go.Figure()
-        pnl_fig.add_trace(go.Scatter(x=[t["time"] for t in st.session_state.trade_log], y=pnl,
-                                     mode='lines', name='Realized PnL', line=dict(color='cyan')))
-        pnl_fig.update_layout(template="plotly_dark", title="📊 Realized PnL", height=300)
-        st.plotly_chart(pnl_fig, use_container_width=True)
-
-    # Unrealized PnL
+# Unrealized PnL
     current_unrealized = 0
     if st.session_state.positions:
         for pos in st.session_state.positions:
