@@ -16,17 +16,6 @@ st_autorefresh(interval=5000, key="refresh")
 st.markdown("""
     <style>
         body { background-color: #0e1117; color: white; }
-        .neon {
-            font-size: 22px; font-weight: bold; color: white;
-            text-align: center; padding: 12px; border-radius: 8px;
-            margin-bottom: 15px; border: 2px solid white;
-            background-color: #111; box-shadow: 0 0 10px #39ff14, 0 0 20px #39ff14;
-            animation: flicker 1.5s infinite alternate;
-        }
-        @keyframes flicker {
-            0% { text-shadow: 0 0 5px #39ff14, 0 0 10px #39ff14; }
-            100% { text-shadow: 0 0 20px #39ff14, 0 0 40px #39ff14; }
-        }
         .panel {
             background-color: #1e1e1e; border-radius: 10px;
             padding: 15px; border: 2px solid white; height: 100%;
@@ -136,7 +125,8 @@ left, middle, right = st.columns([1.5, 3, 1.5])
 # ---------- AI Panel ----------
 with left:
     st.markdown("<div class='panel'>", unsafe_allow_html=True)
-    st.markdown("<div class='neon'>🤖 AI Market Intelligence</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:22px;font-weight:bold;text-align:center;padding:12px;border-radius:8px;margin-bottom:15px;border:2px solid #00FFFF;box-shadow:0 0 15px #00FFFF,0 0 30px #00FFFF;'>🤖 AI Market Intelligence</div>", unsafe_allow_html=True)
+    
     color = "#39ff14" if ai_signal == "BUY" else "#ff073a" if ai_signal == "SELL" else "#ffff00"
     
     st.markdown(f"""
@@ -195,7 +185,7 @@ if st.session_state.show_modal:
 # ---------- Main Panel ----------
 with middle:
     st.markdown("<div class='panel'>", unsafe_allow_html=True)
-    st.markdown("<div class='neon'>⚡ High Frequency Trading Dashboard</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:22px;font-weight:bold;text-align:center;padding:12px;border-radius:8px;margin-bottom:15px;border:2px solid #FFD700;box-shadow:0 0 15px #FFD700,0 0 30px #FFD700;'>⚡ High Frequency Trading Dashboard</div>", unsafe_allow_html=True)
 
     # Price + Volume Chart
     fig = go.Figure()
@@ -212,44 +202,10 @@ with middle:
     else:
         st.info("No trades yet.")
 
-    # Realized PnL
-    pnl, cum_pnl, open_positions = [], 0, []
-    for trade in st.session_state.trade_log:
-        if trade["side"] == "BUY":
-            open_positions.append((trade["qty"], trade["price"]))
-            cum_pnl -= trade["qty"] * trade["price"]
-        else:
-            if open_positions:
-                qty_to_sell = trade["qty"]
-                while qty_to_sell > 0 and open_positions:
-                    qty_open, price_open = open_positions[0]
-                    if qty_open <= qty_to_sell:
-                        cum_pnl += qty_open * trade["price"]
-                        qty_to_sell -= qty_open
-                        open_positions.pop(0)
-                    else:
-                        cum_pnl += qty_to_sell * trade["price"]
-                        open_positions[0] = (qty_open - qty_to_sell, price_open)
-                        qty_to_sell = 0
-        pnl.append(cum_pnl)
-
-    st.markdown(f"""
-        <div style='text-align:center;font-size:30px;font-weight:bold;margin:20px;
-        padding:15px;border-radius:10px;background:#111;border:3px solid white;
-        color:#39ff14;'>💰 TOTAL PROFIT: {cum_pnl:.2f} USD</div>
-    """, unsafe_allow_html=True)
-
-    if pnl:
-        pnl_fig = go.Figure()
-        pnl_fig.add_trace(go.Scatter(x=[t["time"] for t in st.session_state.trade_log], y=pnl,
-                                     mode='lines', name='Realized PnL', line=dict(color='cyan')))
-        pnl_fig.update_layout(template="plotly_dark", title="📊 Realized PnL", height=300)
-        st.plotly_chart(pnl_fig, use_container_width=True)
-
 # ---------- Trading Panel ----------
 with right:
     st.markdown("<div class='panel'>", unsafe_allow_html=True)
-    st.markdown("<div class='neon'>🛠 Trading Panel</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:22px;font-weight:bold;text-align:center;padding:12px;border-radius:8px;margin-bottom:15px;border:2px solid #FF00FF;box-shadow:0 0 15px #FF00FF,0 0 30px #FF00FF;'>🛠 Trading Panel</div>", unsafe_allow_html=True)
 
     # Inputs (auto-synced with AI)
     mode = st.radio("Mode", ["Simulation", "Live"])
