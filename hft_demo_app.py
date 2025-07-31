@@ -1,117 +1,112 @@
+import os
+os.environ["STREAMLIT_WATCH_FILE_SYSTEM"] = "false"
+
 import streamlit as st
 import pandas as pd
-import requests
-import hmac, hashlib, time, urllib.parse
-import plotly.graph_objects as go
+import random
+import time
 from datetime import datetime
-from streamlit_autorefresh import st_autorefresh
 
-# ✅ Binance Testnet API
-BASE_URL = "https://testnet.binance.vision/api"
+# ----------------------------
+# ✅ PAGE CONFIG
+# ----------------------------
+st.set_page_config(page_title="HFT Demo", page_icon="📈", layout="wide")
 
-# ✅ Streamlit Config
-st.set_page_config(page_title="HFT + AI Signals", layout="wide")
-st.title("⚡ HFT Trading App with AI Signals & Real-Time P&L")
+# ----------------------------
+# ✅ SESSION STATE INIT
+# ----------------------------
+if "price_data" not in st.session_state:
+    st.session_state.price_data = []
 
-# ✅ Sidebar: Refresh Interval
-refresh_interval = st.sidebar.slider("Refresh Interval (seconds)", 1, 10, 3)
-st_autorefresh(interval=refresh_interval * 1000, key="refresh")
+if "trade_log" not in st.session_state:
+    st.session_state.trade_log = []
 
-# ✅ Secrets
-API_KEY = st.secrets.get("binance", {}).get("api_key", "")
-API_SECRET = st.secrets.get("binance", {}).get("api_secret", "")
-OPENAI_KEY = st.secrets.get("openai", {}).get("api_key", "")
+if "positions" not in st.session_state:
+    st.session_state.positions = {"long": 0, "short": 0}
 
-# ✅ Initialize Session State
-for key, val in {
-    "price_data": [],
-    "trade_log": [],
-    "realized_pnl": 0.0,
-    "position_qty": 0.0,
-    "avg_buy_price": 0.0,
-    "ai_signal": None
-}.items():
-    if key not in st.session_state:
-        st.session_state[key] = val
+# ----------------------------
+# ✅ PRICE SIMULATION FUNCTION
+# ----------------------------
+def simulate_price():
+    """Simulate BTC/USDT price movement"""
+    base_price = 68000
+    if st.session_state.price_data:
+        base_price = st.session_state.price_data[-1]["price"]
+    # Random price movement
+    price = base_price + random.uniform(-50, 50)
+    return round(price, 2)
 
-# ✅ Utility Functions
+# ----------------------------
+# ✅ UPDATE POSITIONS FUNCTION
+# ----------------------------
 def update_positions(side, qty, price):
     if side == "BUY":
-        total_cost = st.session_state.avg_buy_price * st.session_state.position_qty
-        total_cost += price * qty
-        st.session_state.position_qty += qty
-        st.session_state.avg_buy_price = total_cost / st.session_state.position_qty
-    else:  # SELL
-        if st.session_state.position_qty >= qty:
-            pnl = (price - st.session_state.avg_buy_price) * qty
-            st.session_state.realized_pnl += pnl
-            st.session_state.position_qty -= qty
-            if st.session_state.position_qty == 0:
-                st.session_state.avg_buy_price = 0.0
+        st.session_state.positions["long"] += qty
+    else:
+        st.session_state.positions["short"] += qty
 
-def sign(params):
-    query = urllib.parse.urlencode(params)
-    return hmac.new(API_SECRET.encode(), query.encode(), hashlib.sha256).hexdigest()
+# ----------------------------
+# ✅ HEADER
+# ----------------------------
+st.title("⚡ High-Frequency Trading (HFT) Demo")
+st.caption("Real-time BTC/USDT Price Simulation with Mock Orders")
 
-def fetch_price():
-    try:
-        r = requests.get(f"{BASE_URL}/v3/ticker/price", params={"symbol": "BTCUSDT"}, timeout=3)
-        if r.status_code == 200:
-            return float(r.json()["price"])
-    except:
-        return None
-    return None
+# ----------------------------
+# ✅ LIVE PRICE FEED
+# ----------------------------
+col1, col2 = st.columns([2, 1])
 
-# ✅ Fetch Price
-price = fetch_price()
-if price:
-    st.session_state.price_data.append({"time": datetime.now(), "price": price})
-
-# ✅ Place Order (Simulation Only for Now)
-order_type = st.sidebar.selectbox("Order Type", ["MARKET"])
-side = st.sidebar.selectbox("Side", ["BUY", "SELL"])
-qty = st.sidebar.number_input("Quantity (BTC)", value=0.001, min_value=0.0001)
-if st.sidebar.button("Submit Order"):
-    update_positions(side, qty, price)
-    st.session_state.trade_log.append({"time": datetime.now(), "side": side, "price": price, "qty": qty})
-    st.sidebar.success(f"Simulated {side} at {price:.2f}")
-
-# ✅ Charts
-col1, col2 = st.columns(2)
 with col1:
-    st.subheader("📈 Price Chart")
-    if len(st.session_state.price_data) > 1:
-        df = pd.DataFrame(st.session_state.price_data[-50:])
-        fig = go.Figure(go.Scatter(x=df["time"], y=df["price"], mode="lines"))
-        st.plotly_chart(fig, use_container_width=True)
+    st.subheader("📈 Live BTC/USDT Price")
+    price_placeholder = st.empty()
+
+    # Update price every second for live effect
+    price = simulate_price()
+    st.session_state.price_data.append({"time": datetime.now(), "price": price})
+    price_placeholder.metric("BTC/USDT", f"${price}")
+
 with col2:
-    st.subheader("💹 P&L")
-    st.metric("Position Qty", f"{st.session_state.position_qty:.4f}")
-    st.metric("Avg Buy Price", f"{st.session_state.avg_buy_price:.2f}")
-    st.metric("Realized P&L", f"{st.session_state.realized_pnl:.2f}")
+    st.subheader("📊 Current Positions")
+    st.write(st.session_state.positions)
 
-# ✅ AI Recommendation
-st.subheader("🤖 AI Trading Signal")
-if OPENAI_KEY:
-    if st.button("Get AI Recommendation"):
-        st.write("🔍 Fetching AI signal...")
-        try:
-            prompt = f"BTC price: {price}, history: {[p['price'] for p in st.session_state.price_data[-10:]]}. Suggest BUY, SELL or HOLD with price."
-            headers = {"Authorization": f"Bearer {OPENAI_KEY}", "Content-Type": "application/json"}
-            payload = {
-                "model": "gpt-4",
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 100
-            }
-            r = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-            if r.status_code == 200:
-                st.session_state.ai_signal = r.json()["choices"][0]["message"]["content"]
-            else:
-                st.session_state.ai_signal = f"Error: {r.text}"
-        except Exception as e:
-            st.session_state.ai_signal = f"Error: {str(e)}"
+# ----------------------------
+# ✅ ORDER ENTRY
+# ----------------------------
+st.sidebar.header("Place Order")
+mode = st.sidebar.radio("Mode", ["Simulation", "Live"], index=0)
+side = st.sidebar.selectbox("Side", ["BUY", "SELL"])
+qty = st.sidebar.number_input("Quantity (BTC)", min_value=0.001, step=0.001)
+order_type = st.sidebar.radio("Order Type", ["MARKET", "LIMIT"])
+price_input = st.sidebar.number_input("Limit Price", min_value=1.0, value=price, step=1.0)
+
+if st.sidebar.button("Submit Order"):
+    trade_price = price_input if order_type == "LIMIT" else price
+
+    if mode == "Simulation":
+        update_positions(side, qty, trade_price)
+        st.session_state.trade_log.append({
+            "time": datetime.now(),
+            "side": side,
+            "qty": qty,
+            "price": trade_price
+        })
+        st.sidebar.success(f"✅ {side} {qty} BTC at ${trade_price}")
+    else:
+        st.sidebar.warning("Live trading not implemented in this demo.")
+
+# ----------------------------
+# ✅ PRICE CHART
+# ----------------------------
+if len(st.session_state.price_data) > 0:
+    df_price = pd.DataFrame(st.session_state.price_data[-100:])
+    st.line_chart(df_price.set_index("time")["price"])
+
+# ----------------------------
+# ✅ TRADE LOG
+# ----------------------------
+st.subheader("📜 Trade Log")
+if len(st.session_state.trade_log) > 0:
+    df_trades = pd.DataFrame(st.session_state.trade_log)
+    st.dataframe(df_trades)
 else:
-    st.warning("⚠️ No OpenAI API key in secrets.")
-
-if st.session_state.ai_signal:
-    st.write(f"**AI Suggestion:** {st.session_state.ai_signal}")
+    st.info("No trades yet. Place an order from the sidebar!")
