@@ -1,158 +1,144 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
+import random
 import time
-from datetime import datetime
 import plotly.graph_objects as go
-from streamlit_autorefresh import st_autorefresh
+from datetime import datetime
 
-# Auto-refresh every 5 seconds
-st_autorefresh(interval=5000, key="auto-refresh")
+st.set_page_config(layout="wide", page_title="HFT AI Dashboard")
 
-st.set_page_config(layout="wide")
-
-# ------------------- CSS for Styling -------------------
+# ---------------------- CSS Styling ----------------------
 st.markdown("""
     <style>
-        body {
-            background-color: #0e1117;
-            color: white;
-        }
-        .panel {
-            background-color: #1e1e1e;
-            border: 2px solid white;
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 15px;
-        }
-        .neon {
-            text-align: center;
-            font-size: 24px;
-            font-weight: bold;
-            padding: 10px;
-            border-radius: 8px;
-            box-shadow: 0 0 15px #39ff14;
-            color: white;
-        }
-        .neon-red {
-            box-shadow: 0 0 15px #ff073a;
-        }
-        .button-signal {
-            text-align: center;
-            font-size: 20px;
-            font-weight: bold;
-            padding: 8px;
-            margin-top: 10px;
-            border-radius: 8px;
-            box-shadow: 0 0 15px #39ff14;
-        }
+    body {
+        background-color: black;
+    }
+    .left-panel, .right-panel {
+        background-color: #2c2c2c;
+        padding: 15px;
+        border: 2px solid white;
+        border-radius: 10px;
+        height: 100vh;
+    }
+    .middle-panel {
+        background-color: black;
+        padding: 15px;
+    }
+    @keyframes neon-flash-green {
+        0%, 100% {box-shadow: 0 0 10px #39ff14, 0 0 20px #39ff14;}
+        50% {box-shadow: 0 0 30px #00ff00, 0 0 60px #00ff00;}
+    }
+    @keyframes neon-flash-red {
+        0%, 100% {box-shadow: 0 0 10px #ff073a, 0 0 20px #ff073a;}
+        50% {box-shadow: 0 0 30px #ff0000, 0 0 60px #ff0000;}
+    }
+    .neon-green {
+        animation: neon-flash-green 1.5s infinite alternate;
+        color: #39ff14;
+        text-align: center;
+        font-size: 24px;
+        font-weight: bold;
+        padding: 10px;
+        border-radius: 8px;
+    }
+    .neon-red {
+        animation: neon-flash-red 1.5s infinite alternate;
+        color: #ff073a;
+        text-align: center;
+        font-size: 24px;
+        font-weight: bold;
+        padding: 10px;
+        border-radius: 8px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
-# ------------------- Session State -------------------
-if "price_data" not in st.session_state or not isinstance(st.session_state.price_data, list):
+# ---------------------- Session State ----------------------
+if 'price_data' not in st.session_state:
     st.session_state.price_data = []
-if "trade_log" not in st.session_state:
+if 'trade_log' not in st.session_state:
     st.session_state.trade_log = []
-if "positions" not in st.session_state:
+if 'positions' not in st.session_state:
     st.session_state.positions = []
-if "ai_signal" not in st.session_state:
-    st.session_state.ai_signal = "HOLD"
-if "pnl_history" not in st.session_state:
-    st.session_state.pnl_history = []
 
-# ------------------- Simulated Price Generator -------------------
-def generate_price_data():
-    last_price = st.session_state.price_data[-1][1] if st.session_state.price_data else 30000
-    new_price = round(last_price + np.random.uniform(-50, 50), 2)
-    new_volume = np.random.randint(10, 100)
-    st.session_state.price_data.append((datetime.now().strftime("%H:%M:%S"), new_price, new_volume))
-    if len(st.session_state.price_data) > 100:
-        st.session_state.price_data.pop(0)
+# ---------------------- Simulate Live Price ----------------------
+price = 30000 + random.uniform(-100, 100)
+st.session_state.price_data.append((datetime.now(), price, random.randint(50, 200)))
 
-# ------------------- AI Market Signal -------------------
+# ---------------------- AI Market Intelligence ----------------------
 def ai_market_signal():
-    if len(st.session_state.price_data) < 10:
-        return "HOLD", "Collecting more data for better prediction."
     prices = [p[1] for p in st.session_state.price_data[-10:]]
-    trend = np.polyfit(range(len(prices)), prices, 1)[0]
-    if trend > 0.8:
-        return "BUY", "Upward trend → bullish momentum.\nExpected +0.8% in next few mins."
-    elif trend < -0.8:
-        return "SELL", "Downward trend → bearish momentum.\nPossible -0.7% drop soon."
+    if len(prices) < 3:
+        return "WAIT", "Insufficient data for prediction. Collecting more ticks..."
+    avg = sum(prices) / len(prices)
+    trend = prices[-1] - prices[0]
+    if trend > 0:
+        return "BUY", "Market Signal: BUY\nPrice trend is upward, strong bullish momentum. Expect +0.8% rise in short term."
+    elif trend < 0:
+        return "SELL", "Market Signal: SELL\nDowntrend forming, sellers dominant. Expect ~0.5% drop based on volatility."
     else:
-        return "HOLD", "Sideways movement.\nLimited opportunity now."
+        return "HOLD", "Market neutral. No strong signals detected."
+    
+ai_signal, ai_text = ai_market_signal()
+neon_class = "neon-green" if ai_signal == "BUY" else "neon-red" if ai_signal == "SELL" else "neon-green"
 
-# ------------------- Layout -------------------
-col1, col2, col3 = st.columns([1.5, 3, 1.5])
+# ---------------------- Layout ----------------------
+left, middle, right = st.columns([1.5, 3, 1.5])
 
-# AI PANEL
-with col1:
-    signal, ai_text = ai_market_signal()
-    st.session_state.ai_signal = signal
-    neon_class = "neon" if signal == "BUY" else "neon neon-red" if signal == "SELL" else "neon"
-    st.markdown(f'<div class="panel"><div class="{neon_class}">🤖 AI Market Intelligence</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="button-signal">{signal}</div>', unsafe_allow_html=True)
+# -------- LEFT PANEL: AI Intelligence --------
+with left:
+    st.markdown(f"<div class='{neon_class}'>🤖 AI Market Intelligence</div>", unsafe_allow_html=True)
     st.write(ai_text)
-    st.markdown('</div>', unsafe_allow_html=True)
 
-# MAIN DASHBOARD
-with col2:
-    st.markdown(f'<div class="panel"><div class="{neon_class}">⚡ High Frequency Trading Dashboard</div>', unsafe_allow_html=True)
-    generate_price_data()
+# -------- MIDDLE PANEL: Price & P&L Charts --------
+with middle:
+    st.markdown(f"<div class='{neon_class}'>⚡ High Frequency Trading AI Dashboard</div>", unsafe_allow_html=True)
+
+    # Price & Volume Chart
     df = pd.DataFrame(st.session_state.price_data, columns=["time", "price", "volume"])
-
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df["time"], y=df["price"], mode='lines+markers', name="Price", line=dict(color="lime", width=2)))
-    fig.add_trace(go.Bar(x=df["time"], y=df["volume"], name="Volume", marker=dict(color="blue"), yaxis="y2"))
-    fig.update_layout(
-        template="plotly_dark",
-        yaxis=dict(title="Price (USD)"),
-        yaxis2=dict(title="Volume", overlaying="y", side="right"),
-        margin=dict(l=10, r=10, t=30, b=10),
-        height=400
-    )
+    fig.add_trace(go.Scatter(x=df['time'], y=df['price'], mode='lines', name='Price', line=dict(color='lime')))
+    fig.add_trace(go.Bar(x=df['time'], y=df['volume'], name='Volume', marker_color='blue', yaxis='y2'))
+    fig.update_layout(title="Live BTC Price & Volume", xaxis_title="Time",
+                      yaxis=dict(title="Price", side="left"),
+                      yaxis2=dict(title="Volume", overlaying="y", side="right"),
+                      plot_bgcolor='black', paper_bgcolor='black', font=dict(color='white'))
     st.plotly_chart(fig, use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
 
-    # ------------------- Realized & Unrealized P&L -------------------
-    st.markdown(f'<div class="panel"><div class="{neon_class}">📊 Realized & Unrealized P&L</div>', unsafe_allow_html=True)
-    realized_pnl = sum([t.get("PnL", 0) for t in st.session_state.trade_log])
-    unrealized_pnl = np.random.uniform(-500, 500)  # Simulated
-    st.metric("Realized P&L (USD)", f"${realized_pnl:,.2f}")
-    st.metric("Unrealized P&L (USD)", f"${unrealized_pnl:,.2f}")
-
-    st.session_state.pnl_history.append((datetime.now().strftime("%H:%M:%S"), realized_pnl, unrealized_pnl))
-    pnl_df = pd.DataFrame(st.session_state.pnl_history, columns=["time", "realized", "unrealized"])
-    fig_pnl = go.Figure()
-    fig_pnl.add_trace(go.Scatter(x=pnl_df["time"], y=pnl_df["realized"], mode="lines", name="Realized P&L", line=dict(color="yellow")))
-    fig_pnl.add_trace(go.Scatter(x=pnl_df["time"], y=pnl_df["unrealized"], mode="lines", name="Unrealized P&L", line=dict(color="green")))
-    fig_pnl.update_layout(template="plotly_dark", height=300)
-    st.plotly_chart(fig_pnl, use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# TRADING PANEL
-with col3:
-    st.markdown(f'<div class="panel"><div class="{neon_class}">🛠 Trading Panel</div>', unsafe_allow_html=True)
-    mode = st.radio("Mode", ["Simulation", "Live"])
-    side = st.radio("Side", ["BUY", "SELL"])
-    qty = st.number_input("Quantity", min_value=1, value=1, step=1)
-    order_type = st.radio("Order Type", ["MARKET", "LIMIT"])
-    price = st.number_input("Limit Price", min_value=1.0, value=30000.0, step=100.0)
-
-    if st.button("Submit Order"):
-        st.session_state.trade_log.append({"time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "side": side, "qty": qty, "price": price})
-        st.success(f"Order Submitted: {side} {qty} @ {price}")
-    st.markdown('</div>', unsafe_allow_html=True)
+    # P&L Chart
+    pnl = []
+    realized = 0
+    for t in st.session_state.trade_log:
+        if t['side'] == 'SELL':
+            realized += (t['price'] - 30000) * t['qty']
+        pnl.append(realized)
+    if pnl:
+        pnl_fig = go.Figure()
+        pnl_fig.add_trace(go.Scatter(y=pnl, mode='lines+markers', name="P&L", line=dict(color='yellow')))
+        pnl_fig.update_layout(title="Realized P&L Over Time", plot_bgcolor='black', paper_bgcolor='black', font=dict(color='white'))
+        st.plotly_chart(pnl_fig, use_container_width=True)
 
     # Trade Log
-    st.markdown('<div class="panel"><b>📜 Trade Log</b></div>', unsafe_allow_html=True)
+    st.subheader("📜 Trade Log")
     if st.session_state.trade_log:
-        st.dataframe(pd.DataFrame(st.session_state.trade_log).tail(10))
+        st.dataframe(pd.DataFrame(st.session_state.trade_log))
     else:
         st.write("No trades yet.")
 
-    # Portfolio Metrics
-    st.markdown('<div class="panel"><b>📊 Portfolio Metrics</b></div>', unsafe_allow_html=True)
-    st.table(pd.DataFrame({"Metric": ["Open Position (BTC)", "Current Value (USD)", "Average Entry Price"],
-                           "Value": [qty, f"${qty * price:,.2f}", f"${price:,.2f}"]}))
+# -------- RIGHT PANEL: Trading Controls --------
+with right:
+    st.markdown(f"<div class='{neon_class}'>🛠 Trading Panel</div>", unsafe_allow_html=True)
+    mode = st.radio("Mode", ["Simulation", "Live"])
+    side = st.radio("Side", ["BUY", "SELL"])
+    qty = st.number_input("Quantity", min_value=1, value=1)
+    order_type = st.radio("Order Type", ["MARKET", "LIMIT"])
+    price_input = None
+    if order_type == "LIMIT":
+        price_input = st.number_input("Limit Price", min_value=1.0, value=price)
+    if st.button("Submit Order"):
+        trade_price = price_input if order_type == "LIMIT" else price
+        st.session_state.trade_log.append({"time": datetime.now(), "side": side, "qty": qty, "price": trade_price})
+
+# ---------------------- Auto Refresh ----------------------
+time.sleep(5)
+st.rerun()
