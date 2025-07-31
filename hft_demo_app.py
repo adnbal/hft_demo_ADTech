@@ -47,8 +47,6 @@ if "positions" not in st.session_state:
 if "unrealized_history" not in st.session_state:
     st.session_state.unrealized_history = []
     st.session_state.unrealized_time = []
-if "show_modal" not in st.session_state:
-    st.session_state.show_modal = False
 
 if "selected_side" not in st.session_state:
     st.session_state.selected_side = "BUY"
@@ -144,7 +142,7 @@ if ai_signal != "HOLD" and forecast_price:
 # ---------- Layout ----------
 left, middle, right = st.columns([1.5, 3, 1.5])
 
-# ---------- AI Panel ----------
+# ---------- AI Panel (Inline Details) ----------
 with left:
     st.markdown("<div class='panel'>", unsafe_allow_html=True)
     st.markdown("<div style='font-size:22px;font-weight:bold;text-align:center;padding:12px;border-radius:8px;margin-bottom:15px;border:2px solid #00FFFF;box-shadow:0 0 15px #00FFFF,0 0 30px #00FFFF;'>🤖 AI Market Intelligence</div>", unsafe_allow_html=True)
@@ -168,38 +166,10 @@ with left:
     gauge_fig.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=10), template="plotly_dark")
     st.plotly_chart(gauge_fig, use_container_width=True)
 
-    if st.button("🔍 Why this forecast?"):
-        st.session_state.show_modal = True
-    st.markdown("</div>", unsafe_allow_html=True)
-
-# ---------- AI Modal FIX ----------
-if st.session_state.show_modal:
-    modal_html = """
-        <style>
-        .overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.7); z-index: 9998;
-        }
-        .popup {
-            background: #1e1e1e; color: white; padding: 20px;
-            border-radius: 10px; width: 40%; margin: auto;
-            position: fixed; top: 20%; left: 0; right: 0;
-            box-shadow: 0 0 30px #39ff14; z-index: 9999;
-        }
-        .popup h3 { color: #39ff14; text-align: center; }
-        </style>
-        <div class="overlay"></div>
-        <div class="popup">
-    """
-    st.markdown(modal_html, unsafe_allow_html=True)
-    st.markdown("### 🤖 AI Market Forecast Explanation", unsafe_allow_html=True)
-    st.write(f"**Signal:** {ai_signal}")
-    st.write(f"**Reason:** {ai_text}")
-    st.write("#### Key Metrics:")
+    st.write("### Key Metrics")
     for k, v in metrics.items():
         st.write(f"- {k}: {v}")
-    if st.button("Close"):
-        st.session_state.show_modal = False
+
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------- Middle Panel (Candlestick + Depth + PnL) ----------
