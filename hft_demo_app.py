@@ -13,27 +13,30 @@ from streamlit_autorefresh import st_autorefresh
 BASE_URL = "https://testnet.binance.vision/api"
 
 # ✅ Streamlit Page Config
-st.set_page_config(page_title="HFT Testnet Trading App", layout="wide")
-st.title("⚡ Advanced HFT Trading Prototype (Binance Testnet)")
+st.set_page_config(page_title="HFT Trading with P&L", layout="wide")
+st.title("⚡ HFT Trading App with Real-Time P&L (Binance Testnet)")
 
 # ✅ Sidebar: Settings & Refresh
 st.sidebar.header("⚙️ Settings")
 refresh_interval = st.sidebar.slider("Refresh Interval (seconds)", 1, 10, 3)
-auto_refresh = st_autorefresh(interval=refresh_interval * 1000, key="refresh")
+st_autorefresh(interval=refresh_interval * 1000, key="refresh")
 
 # ✅ Load Binance API keys from secrets
 API_KEY = st.secrets["binance"]["api_key"]
 API_SECRET = st.secrets["binance"]["api_secret"]
 
-# ✅ Session State
-if "price_data" not in st.session_state:
-    st.session_state.price_data = []
-if "trade_log" not in st.session_state:
-    st.session_state.trade_log = []
-if "pnl" not in st.session_state:
-    st.session_state.pnl = 0.0
-if "mode" not in st.session_state:
-    st.session_state.mode = "Simulation"
+# ✅ Session State Initialization
+for key, value in {
+    "price_data": [],
+    "trade_log": [],
+    "pnl_data": [],
+    "realized_pnl": 0.0,
+    "position_qty": 0.0,
+    "avg_buy_price": 0.0,
+    "mode": "Simulation"
+}.items():
+    if key not in st.session_state:
+        st.session_state[key] = value
 
 # ✅ Utility: Signature for Binance API
 def sign(params):
@@ -128,11 +131,13 @@ if order_type == "LIMIT":
     price_input = st.sidebar.number_input("Limit Price (USDT)", min_value=10000.0, value=price if price else 30000.0)
 
 if st.sidebar.button("Submit Order"):
+    trade_price = price_input if order_type == "LIMIT" else price
     if mode == "Simulation":
+        update_positions(side, qty, trade_price)
         st.session_state.trade_log.append({
             "time": datetime.now(),
             "side": side,
-            "price": price_input if price_input else price,
+            "price": trade_price,
             "qty": qty,
             "status": "SIMULATED"
         })
@@ -140,10 +145,11 @@ if st.sidebar.button("Submit Order"):
     else:
         result = place_order("BTCUSDT", side, order_type, qty, price_input)
         if "orderId" in result:
+            update_positions(side, qty, trade_price)
             st.session_state.trade_log.append({
                 "time": datetime.now(),
                 "side": side,
-                "price": price_input if price_input else price,
+                "price": trade_price,
                 "qty": qty,
                 "status": "LIVE"
             })
@@ -151,7 +157,35 @@ if st.sidebar.button("Submit Order"):
         else:
             st.sidebar.error(f"Error: {result}")
 
-# ✅ Charts: Price & Order Book
+# ✅ Update Position & P&L
+def update_positions(side, qty, trade_price):
+    if side == "BUY":
+        total_cost = st.session_state.avg_buy_price * st.session_state.position_qty
+        total_cost += trade_price * qty
+        st.session_state.position_qty += qty
+        st.session_state.avg_buy_price = total_cost / st.session_state.position_qty
+    elif side == "SELL":
+        if st.session_state.position_qty >= qty:
+            realized = (trade_price - st.session_state.avg_buy_price) * qty
+            st.session_state.realized_pnl += realized
+            st.session_state.position_qty -= qty
+            if st.session_state.position_qty == 0:
+                st.session_state.avg_buy_price = 0.0
+
+# ✅ Unrealized P&L
+if st.session_state.position_qty > 0 and price:
+    unrealized = (price - st.session_state.avg_buy_price) * st.session_state.position_qty
+else:
+    unrealized = 0.0
+
+# ✅ Save P&L data for chart
+st.session_state.pnl_data.append({
+    "time": datetime.now(),
+    "unrealized": unrealized,
+    "realized": st.session_state.realized_pnl
+})
+
+# ✅ Layout: Price & Order Book
 col1, col2 = st.columns(2)
 with col1:
     st.subheader("📈 Live BTC/USDT Price")
@@ -176,6 +210,22 @@ with col2:
     else:
         st.info("Fetching order book...")
 
+# ✅ P&L Dashboard
+st.subheader("💹 Real-Time P&L Dashboard")
+st.metric("Position Qty", f"{st.session_state.position_qty:.4f} BTC")
+st.metric("Average Buy Price", f"{st.session_state.avg_buy_price:.2f} USDT")
+st.metric("Unrealized P&L", f"{unrealized:.2f} USDT")
+st.metric("Realized P&L", f"{st.session_state.realized_pnl:.2f} USDT")
+
+# ✅ P&L Chart
+if len(st.session_state.pnl_data) > 1:
+    df_pnl = pd.DataFrame(st.session_state.pnl_data[-100:])
+    fig_pnl = go.Figure()
+    fig_pnl.add_trace(go.Scatter(x=df_pnl["time"], y=df_pnl["unrealized"], mode="lines", name="Unrealized P&L", line=dict(color="orange")))
+    fig_pnl.add_trace(go.Scatter(x=df_pnl["time"], y=df_pnl["realized"], mode="lines", name="Realized P&L", line=dict(color="green")))
+    fig_pnl.update_layout(title="P&L Over Time", xaxis_title="Time", yaxis_title="P&L (USDT)")
+    st.plotly_chart(fig_pnl, use_container_width=True)
+
 # ✅ Trade Log
 st.subheader("📜 Trade Log")
 if st.session_state.trade_log:
@@ -183,4 +233,3 @@ if st.session_state.trade_log:
     st.dataframe(df_trades)
 else:
     st.info("No trades yet.")
-
