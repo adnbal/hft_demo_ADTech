@@ -172,18 +172,27 @@ with left:
         st.session_state.show_modal = True
     st.markdown("</div>", unsafe_allow_html=True)
 
-# ---------- AI Modal ----------
+# ---------- AI Modal FIX ----------
 if st.session_state.show_modal:
-    st.markdown("""
+    modal_html = """
         <style>
-        .overlay {position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9998;}
-        .popup {background: #1e1e1e; color: white; padding: 20px; border-radius: 10px; width: 40%; margin: auto;
-                position: fixed; top: 25%; left: 0; right: 0; box-shadow: 0 0 30px #39ff14; z-index: 9999;}
+        .overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); z-index: 9998;
+        }
+        .popup {
+            background: #1e1e1e; color: white; padding: 20px;
+            border-radius: 10px; width: 40%; margin: auto;
+            position: fixed; top: 20%; left: 0; right: 0;
+            box-shadow: 0 0 30px #39ff14; z-index: 9999;
+        }
+        .popup h3 { color: #39ff14; text-align: center; }
         </style>
         <div class="overlay"></div>
         <div class="popup">
-    """, unsafe_allow_html=True)
-    st.markdown("### 🤖 AI Market Forecast Explanation")
+    """
+    st.markdown(modal_html, unsafe_allow_html=True)
+    st.markdown("### 🤖 AI Market Forecast Explanation", unsafe_allow_html=True)
     st.write(f"**Signal:** {ai_signal}")
     st.write(f"**Reason:** {ai_text}")
     st.write("#### Key Metrics:")
@@ -193,10 +202,10 @@ if st.session_state.show_modal:
         st.session_state.show_modal = False
     st.markdown("</div>", unsafe_allow_html=True)
 
-# ---------- Middle Panel with Candlestick, Depth, and PnL ----------
+# ---------- Middle Panel (Candlestick + Depth + PnL) ----------
 with middle:
     st.markdown("<div class='panel'>", unsafe_allow_html=True)
-    st.markdown("<div style='font-size:22px;font-weight:bold;text-align:center;padding:12px;border-radius:8px;margin-bottom:15px;border:2px solid #FFD700;box-shadow:0 0 15px #FFD700,0 0 30px #FFD700;'>📊 Market Visualization</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:22px;font-weight:bold;text-align:center;padding:12px;border-radius:8px;margin-bottom:15px;border:2px solid #FFD700;box-shadow:0 0 15px #FFD700,0 0 30px #FFD700;'>📊 Market Visualization & PnL</div>", unsafe_allow_html=True)
 
     # Candlestick Chart
     if not candles_df.empty:
