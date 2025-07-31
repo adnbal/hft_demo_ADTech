@@ -8,8 +8,8 @@ from streamlit_autorefresh import st_autorefresh
 # ---------- Page Config ----------
 st.set_page_config(page_title="HFT Dashboard", layout="wide")
 
-# ---------- Auto-refresh ----------
-st_autorefresh(interval=5000, key="refresh")  # refresh every 5 sec
+# ---------- Auto-refresh every 5 seconds ----------
+st_autorefresh(interval=5000, key="refresh")
 
 # ---------- Custom CSS ----------
 st.markdown("""
@@ -51,25 +51,25 @@ if "price_data" not in st.session_state:
 if "trade_log" not in st.session_state:
     st.session_state.trade_log = []
 if "positions" not in st.session_state:
-    st.session_state.positions = []
+    st.session_state.positions = []  # [{'qty': x, 'price': y}]
 
 # ---------- Mock Price Feed ----------
 def get_live_price():
     base_price = 30000
     return base_price + random.uniform(-200, 200)
 
-# ---------- AI Signal ----------
+# ---------- AI Signal Logic ----------
 def ai_market_signal():
     if len(st.session_state.price_data) < 10:
         return "HOLD", "Collecting more data for better prediction."
     prices = [p[1] for p in st.session_state.price_data[-10:]]
     trend = (prices[-1] - prices[0]) / prices[0]
     if trend > 0.002:
-        return "BUY", "Strong bullish momentum detected."
+        return "BUY", f"Market Signal: BUY. Price trend is upward, strong bullish momentum. Expect +0.8% rise in short term."
     elif trend < -0.002:
-        return "SELL", "Bearish trend detected."
+        return "SELL", f"Market Signal: SELL. Price trend is downward, bearish momentum. Expect -0.8% fall soon."
     else:
-        return "HOLD", "Market neutral. Wait for clarity."
+        return "HOLD", "Market is neutral. Wait for a clear trend."
 
 # ---------- Layout ----------
 left, middle, right = st.columns([1.5, 3, 1.5])
@@ -115,15 +115,31 @@ with middle:
     else:
         st.info("No trades yet.")
 
-    # PnL Calculation (basic)
+    # Realized PnL Calculation based on positions
     pnl = []
     cum_pnl = 0
+    open_positions = []
+
     for trade in st.session_state.trade_log:
         if trade["side"] == "BUY":
+            open_positions.append((trade["qty"], trade["price"]))
             cum_pnl -= trade["qty"] * trade["price"]
         else:
-            cum_pnl += trade["qty"] * trade["price"]
+            if open_positions:
+                qty_to_sell = trade["qty"]
+                while qty_to_sell > 0 and open_positions:
+                    qty_open, price_open = open_positions[0]
+                    if qty_open <= qty_to_sell:
+                        cum_pnl += qty_open * trade["price"]
+                        qty_to_sell -= qty_open
+                        open_positions.pop(0)
+                    else:
+                        cum_pnl += qty_to_sell * trade["price"]
+                        open_positions[0] = (qty_open - qty_to_sell, price_open)
+                        qty_to_sell = 0
         pnl.append(cum_pnl)
+
+    # PnL Chart
     pnl_fig = go.Figure()
     pnl_fig.add_trace(go.Scatter(x=[t["time"] for t in st.session_state.trade_log], y=pnl, mode='lines', name='PnL', line=dict(color='cyan')))
     pnl_fig.update_layout(template="plotly_dark", title="📊 Realized PnL", height=300)
@@ -145,6 +161,12 @@ with right:
     if st.button("Submit Order"):
         trade_price = price if order_type == "MARKET" else limit_price
         st.session_state.trade_log.append({"time": time.strftime('%H:%M:%S'), "side": side, "qty": qty, "price": trade_price})
+        if side == "BUY":
+            st.session_state.positions.append({"qty": qty, "price": trade_price})
+        else:
+            # For SELL, just reduce positions (simple simulation)
+            if st.session_state.positions:
+                st.session_state.positions.pop(0)
         st.success(f"Order placed: {side} {qty} @ {trade_price}")
 
     st.markdown("</div>", unsafe_allow_html=True)
