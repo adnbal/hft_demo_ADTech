@@ -15,6 +15,8 @@ if "price_data" not in st.session_state:
     st.session_state.price_data = []
 if "trade_log" not in st.session_state:
     st.session_state.trade_log = []
+if "pnl_history" not in st.session_state:
+    st.session_state.pnl_history = []
 
 # ---------------- AUTO REFRESH ----------------
 st_autorefresh(interval=5000, key="auto-refresh")
@@ -116,6 +118,7 @@ with col_main:
 
     df = pd.DataFrame(st.session_state.price_data[-50:])
     if not df.empty:
+        # Price & Volume Chart
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=df["time"], y=df["price"], mode="lines+markers",
                                  name="Price", line=dict(color=color, width=3)))
@@ -126,6 +129,36 @@ with col_main:
                           yaxis2=dict(title="Volume", overlaying="y", side="right"),
                           height=400)
         st.plotly_chart(fig, use_container_width=True)
+
+    # ---- Realized & Unrealized P&L ----
+    st.subheader("📊 Realized & Unrealized P&L")
+    pnl = random.randint(-1500, 1500)
+    st.metric("Unrealized P&L (USD)", f"${pnl}", delta=pnl)
+
+    # Store history for P&L line chart
+    st.session_state.pnl_history.append({"time": datetime.now(), "pnl": pnl})
+    pnl_df = pd.DataFrame(st.session_state.pnl_history[-50:])
+    if not pnl_df.empty:
+        fig_pnl = go.Figure()
+        fig_pnl.add_trace(go.Scatter(x=pnl_df["time"], y=pnl_df["pnl"], mode="lines",
+                                     line=dict(color=color, width=3)))
+        fig_pnl.update_layout(template="plotly_dark", title="P&L Over Time")
+        st.plotly_chart(fig_pnl, use_container_width=True)
+
+    # ---- Trade Log ----
+    st.subheader("📜 Trade Log")
+    if st.session_state.trade_log:
+        st.dataframe(pd.DataFrame(st.session_state.trade_log))
+    else:
+        st.write("No trades yet.")
+
+    # ---- Portfolio Metrics ----
+    st.subheader("📊 Portfolio Metrics")
+    metrics = pd.DataFrame({
+        "Metric": ["Open Position (BTC)", "Current Value (USD)", "Average Entry Price"],
+        "Value": [5, "$151,035.36", "$30,000.00"]
+    })
+    st.dataframe(metrics)
 
     st.markdown("</div>", unsafe_allow_html=True)
 
