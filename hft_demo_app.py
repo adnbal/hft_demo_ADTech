@@ -9,27 +9,18 @@ from streamlit_autorefresh import st_autorefresh
 # ---------- Page Config ----------
 st.set_page_config(page_title="HFT Dashboard", layout="wide")
 
-# ---------- Auto-refresh every 5 seconds ----------
+# ---------- Auto-refresh ----------
 st_autorefresh(interval=5000, key="refresh")
 
 # ---------- Custom CSS ----------
 st.markdown("""
     <style>
-        body {
-            background-color: #0e1117;
-            color: white;
-        }
+        body { background-color: #0e1117; color: white; }
         .neon {
-            font-size: 22px;
-            font-weight: bold;
-            color: white;
-            text-align: center;
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            border: 2px solid white;
-            background-color: #111;
-            box-shadow: 0 0 10px #39ff14, 0 0 20px #39ff14;
+            font-size: 22px; font-weight: bold; color: white;
+            text-align: center; padding: 12px; border-radius: 8px;
+            margin-bottom: 15px; border: 2px solid white;
+            background-color: #111; box-shadow: 0 0 10px #39ff14, 0 0 20px #39ff14;
             animation: flicker 1.5s infinite alternate;
         }
         @keyframes flicker {
@@ -37,26 +28,16 @@ st.markdown("""
             100% { text-shadow: 0 0 20px #39ff14, 0 0 40px #39ff14; }
         }
         .panel {
-            background-color: #1e1e1e;
-            border-radius: 10px;
-            padding: 15px;
-            border: 2px solid white;
-            height: 100%;
+            background-color: #1e1e1e; border-radius: 10px;
+            padding: 15px; border: 2px solid white; height: 100%;
         }
-        /* Ticker Bar */
         .ticker-container {
-            width: 100%;
-            overflow: hidden;
-            white-space: nowrap;
-            background-color: #1a1a1a;
-            border-bottom: 2px solid #39ff14;
-            padding: 8px 0;
+            width: 100%; overflow: hidden; white-space: nowrap;
+            background-color: #1a1a1a; border-bottom: 2px solid #39ff14; padding: 8px 0;
         }
         .ticker-text {
-            display: inline-block;
-            animation: ticker 20s linear infinite;
-            font-size: 18px;
-            color: white;
+            display: inline-block; animation: ticker 20s linear infinite;
+            font-size: 18px; color: white;
         }
         @keyframes ticker {
             0% { transform: translateX(100%); }
@@ -74,13 +55,16 @@ if "trade_log" not in st.session_state:
     st.session_state.trade_log = []
 if "positions" not in st.session_state:
     st.session_state.positions = []
+if "unrealized_history" not in st.session_state:
+    st.session_state.unrealized_history = []
+    st.session_state.unrealized_time = []
 
 # ---------- Mock Price Feed ----------
 def get_live_price():
     base_price = 30000
     return base_price + random.uniform(-200, 200)
 
-# ---------- Mock Ticker Prices ----------
+# ---------- Mock Ticker ----------
 assets = {
     "BTC/USD": 30000 + random.uniform(-150, 150),
     "ETH/USD": 2000 + random.uniform(-20, 20),
@@ -89,7 +73,7 @@ assets = {
     "AMZN": 135 + random.uniform(-1, 1)
 }
 
-# ---------- AI Market Signal with Reason ----------
+# ---------- AI Signal ----------
 def ai_market_signal():
     if len(st.session_state.price_data) < 10:
         return "HOLD", "Collecting more data for better prediction."
@@ -98,19 +82,18 @@ def ai_market_signal():
     trend = (prices[-1] - prices[0]) / prices[0]
     avg_volume = sum(volumes) / len(volumes)
     current_volume = volumes[-1]
-
     if trend > 0.002:
-        reason = "Price trend is bullish with strong upward momentum."
+        reason = "Price trend bullish with strong momentum."
         if current_volume > avg_volume:
-            reason += " Volume is above average, indicating strong buying interest."
-        return "BUY", reason + " Consider entering a long position."
+            reason += " Volume above average, strong buying."
+        return "BUY", reason
     elif trend < -0.002:
-        reason = "Downward trend detected with selling pressure."
+        reason = "Downward trend detected."
         if current_volume > avg_volume:
-            reason += " Volume spike suggests heavy selling activity."
-        return "SELL", reason + " Short positions may benefit."
+            reason += " High volume selling pressure."
+        return "SELL", reason
     else:
-        return "HOLD", "Market appears neutral. No significant price movement. Best to wait for clarity."
+        return "HOLD", "Market neutral. No strong movement."
 
 # ---------- Ticker Bar ----------
 ticker_html = "<div class='ticker-container'><div class='ticker-text'>"
@@ -128,10 +111,8 @@ left, middle, right = st.columns([1.5, 3, 1.5])
 with left:
     st.markdown("<div class='panel'>", unsafe_allow_html=True)
     st.markdown("<div class='neon'>🤖 AI Market Intelligence</div>", unsafe_allow_html=True)
-
     ai_signal, ai_text = ai_market_signal()
     color = "#39ff14" if ai_signal == "BUY" else "#ff073a" if ai_signal == "SELL" else "#ffff00"
-
     st.markdown(f"""
         <div style='text-align:center;font-size:24px;font-weight:bold;color:white;
         background-color:{color};border-radius:10px;padding:12px;margin-bottom:15px;
@@ -165,7 +146,7 @@ with middle:
     else:
         st.info("No trades yet.")
 
-    # Calculate Realized PnL & Total Profit
+    # ---------- Realized PnL ----------
     pnl = []
     cum_pnl = 0
     open_positions = []
@@ -188,7 +169,6 @@ with middle:
                         qty_to_sell = 0
         pnl.append(cum_pnl)
 
-    # Total Profit Counter
     st.markdown(f"""
         <div style='text-align:center;font-size:30px;font-weight:bold;margin:20px;
         padding:15px;border-radius:10px;background:#111;border:3px solid white;
@@ -197,22 +177,44 @@ with middle:
         </div>
     """, unsafe_allow_html=True)
 
-    # Realized PnL Chart
-    if st.session_state.trade_log:
+    if pnl:
         pnl_fig = go.Figure()
         pnl_fig.add_trace(go.Scatter(x=[t["time"] for t in st.session_state.trade_log], y=pnl,
-                                     mode='lines', name='PnL', line=dict(color='cyan')))
+                                     mode='lines', name='Realized PnL', line=dict(color='cyan')))
         pnl_fig.update_layout(template="plotly_dark", title="📊 Realized PnL", height=300)
         st.plotly_chart(pnl_fig, use_container_width=True)
 
-    # Cumulative PnL for Last 5 Hours
+    # ---------- Unrealized PnL ----------
+    current_unrealized = 0
+    if st.session_state.positions:
+        for pos in st.session_state.positions:
+            current_unrealized += (price - pos["price"]) * pos["qty"]
+    st.session_state.unrealized_history.append(current_unrealized)
+    st.session_state.unrealized_time.append(time.strftime('%H:%M:%S'))
+
+    # Alert color
+    unrealized_color = "#39ff14" if current_unrealized >= 0 else "#ff073a"
+    st.markdown(f"""
+        <div style='text-align:center;font-size:22px;font-weight:bold;margin:10px;
+        padding:10px;border-radius:8px;background:#111;border:2px solid {unrealized_color};
+        box-shadow:0 0 15px {unrealized_color};color:{unrealized_color};'>
+        Unrealized PnL: {current_unrealized:.2f} USD
+        </div>
+    """, unsafe_allow_html=True)
+
+    unrealized_fig = go.Figure()
+    unrealized_fig.add_trace(go.Scatter(x=st.session_state.unrealized_time,
+                                        y=st.session_state.unrealized_history,
+                                        mode='lines+markers', name='Unrealized PnL',
+                                        line=dict(color='magenta')))
+    unrealized_fig.update_layout(template="plotly_dark", title="📊 Unrealized PnL (Open Positions)", height=300)
+    st.plotly_chart(unrealized_fig, use_container_width=True)
+
+    # ---------- Cumulative PnL (Last 5 Hours) ----------
     now = datetime.now()
     five_hours_ago = now - timedelta(hours=5)
-    trade_times = []
-    cumulative_pnl = []
-    cum_pnl_5h = 0
+    trade_times, cumulative_pnl, cum_pnl_5h = [], [], 0
     open_positions_5h = []
-
     for trade in st.session_state.trade_log:
         trade_time = datetime.strptime(trade["time"], "%H:%M:%S")
         trade_time = datetime.combine(now.date(), trade_time.time())
@@ -244,8 +246,6 @@ with middle:
         cum_pnl_fig.update_layout(template="plotly_dark", title="💰 Cumulative Profit (Last 5 Hours)",
                                    xaxis_title="Time", yaxis_title="PnL (USD)", height=300)
         st.plotly_chart(cum_pnl_fig, use_container_width=True)
-    else:
-        st.info("No trades in the last 5 hours.")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -253,7 +253,6 @@ with middle:
 with right:
     st.markdown("<div class='panel'>", unsafe_allow_html=True)
     st.markdown("<div class='neon'>🛠 Trading Panel</div>", unsafe_allow_html=True)
-
     mode = st.radio("Mode", ["Simulation", "Live"])
     side = st.radio("Side", ["BUY", "SELL"])
     qty = st.number_input("Quantity", min_value=1.0, step=1.0, value=1.0)
