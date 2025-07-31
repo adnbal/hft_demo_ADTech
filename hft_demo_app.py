@@ -120,23 +120,25 @@ with left:
         st.session_state.show_modal = True
     st.markdown("</div>", unsafe_allow_html=True)
 
-# ---------- AI Modal (Fixed) ----------
+# ---------- AI Modal (Fully Fixed) ----------
 if st.session_state.show_modal:
     st.markdown(
         """
         <style>
-        .modal-overlay {
+        .overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: center;
+            background: rgba(0,0,0,0.7); z-index: 9998;
+        }
+        .popup {
+            background: #1e1e1e; color: white; padding: 20px;
+            border-radius: 10px; width: 40%; margin: auto;
+            position: fixed; top: 25%; left: 0; right: 0;
+            box-shadow: 0 0 30px #39ff14;
             z-index: 9999;
         }
-        .modal-box {
-            background-color: #1e1e1e; padding: 20px; border-radius: 10px; width: 50%;
-            color: white; text-align: left; box-shadow: 0 0 30px #39ff14;
-        }
         </style>
-        <div class="modal-overlay">
-            <div class="modal-box">
+        <div class="overlay"></div>
+        <div class="popup">
         """,
         unsafe_allow_html=True,
     )
@@ -149,7 +151,7 @@ if st.session_state.show_modal:
     if st.button("Close"):
         st.session_state.show_modal = False
 
-    st.markdown("</div></div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------- Main Panel ----------
 with middle:
