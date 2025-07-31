@@ -91,14 +91,16 @@ def ai_market_signal():
 
     if trend > 0.002:
         forecast_price = current_price * (1 + abs(trend))
-        reason = f"Price trend bullish. Expected short-term target: ${forecast_price:.2f}."
+        change_pct = ((forecast_price - current_price) / current_price) * 100
+        reason = f"Price trend bullish. Expected short-term target: ${forecast_price:.2f} ({change_pct:+.2f}%)."
         if current_volume > avg_volume:
             reason += " Volume above average, strong buying."
         return "BUY", reason, forecast_price
 
     elif trend < -0.002:
         forecast_price = current_price * (1 - abs(trend))
-        reason = f"Downward trend detected. Expected short-term target: ${forecast_price:.2f}."
+        change_pct = ((forecast_price - current_price) / current_price) * 100
+        reason = f"Downward trend detected. Expected short-term target: ${forecast_price:.2f} ({change_pct:+.2f}%)."
         if current_volume > avg_volume:
             reason += " High selling pressure."
         return "SELL", reason, forecast_price
@@ -143,6 +145,8 @@ with left:
             box-shadow: 0 0 15px {color}, 0 0 30px {color};
         '>{ai_signal}</div>
     """, unsafe_allow_html=True)
+
+    st.write(f"**AI Suggestion:** {ai_text}")
 
     if st.button("🔍 Why this forecast?"):
         st.session_state.show_modal = True
