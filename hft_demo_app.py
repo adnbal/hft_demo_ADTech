@@ -239,8 +239,17 @@ with right:
     mode = st.radio("Mode", ["Simulation", "Live"])
     side = st.radio("Side", ["BUY", "SELL"])
     qty = st.number_input("Quantity", min_value=0.001, step=0.001, value=0.001)
+
+    # ✅ Dynamic suggested price based on AI signal
+    if ai_signal == "BUY":
+        suggested_price = price * 1.002  # +0.2%
+    elif ai_signal == "SELL":
+        suggested_price = price * 0.998  # -0.2%
+    else:
+        suggested_price = price
+
     order_type = st.radio("Order Type", ["MARKET", "LIMIT"])
-    limit_price = st.number_input("Limit Price (USD)", value=price, step=0.01)
+    limit_price = st.number_input("Limit Price (USD)", value=round(suggested_price, 2), step=0.01)
 
     if st.button("Submit Order"):
         trade_price = price if order_type == "MARKET" else limit_price
