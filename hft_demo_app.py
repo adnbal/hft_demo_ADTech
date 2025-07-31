@@ -61,7 +61,7 @@ if "unrealized_history" not in st.session_state:
 if "show_modal" not in st.session_state:
     st.session_state.show_modal = False
 
-# Initialize UI sync states
+# Initialize trading UI state
 if "selected_side" not in st.session_state:
     st.session_state.selected_side = "BUY"
 if "limit_price" not in st.session_state:
@@ -122,6 +122,14 @@ price = get_live_price()
 st.session_state.price_data.append((time.strftime('%H:%M:%S'), price, random.randint(10, 100)))
 df = pd.DataFrame(st.session_state.price_data, columns=['time', 'price', 'volume'])
 
+# Get AI Advice
+ai_signal, ai_text, forecast_price = ai_market_signal()
+
+# ✅ Auto-sync AI advice into UI fields
+if ai_signal != "HOLD" and forecast_price:
+    st.session_state.selected_side = ai_signal
+    st.session_state.limit_price = round(forecast_price, 2)
+
 # ---------- Layout ----------
 left, middle, right = st.columns([1.5, 3, 1.5])
 
@@ -129,7 +137,6 @@ left, middle, right = st.columns([1.5, 3, 1.5])
 with left:
     st.markdown("<div class='panel'>", unsafe_allow_html=True)
     st.markdown("<div class='neon'>🤖 AI Market Intelligence</div>", unsafe_allow_html=True)
-    ai_signal, ai_text, forecast_price = ai_market_signal()
     color = "#39ff14" if ai_signal == "BUY" else "#ff073a" if ai_signal == "SELL" else "#ffff00"
     
     st.markdown(f"""
@@ -244,13 +251,7 @@ with right:
     st.markdown("<div class='panel'>", unsafe_allow_html=True)
     st.markdown("<div class='neon'>🛠 Trading Panel</div>", unsafe_allow_html=True)
 
-    # AI Sync Button
-    if ai_signal != "HOLD" and forecast_price:
-        if st.button("🔄 Sync AI Advice to Inputs"):
-            st.session_state.selected_side = ai_signal
-            st.session_state.limit_price = round(forecast_price, 2)
-
-    # Inputs (controlled via session state)
+    # Inputs (auto-synced with AI)
     mode = st.radio("Mode", ["Simulation", "Live"])
     side = st.radio("Side", ["BUY", "SELL"], index=0 if st.session_state.selected_side == "BUY" else 1)
     qty = st.number_input("Quantity", min_value=1.0, step=1.0, value=1.0)
@@ -267,7 +268,6 @@ with right:
                 st.session_state.positions.pop(0)
         st.success(f"Order placed: {side} {qty} @ {trade_price}")
 
-    # AI Auto-Trade Button
     if ai_signal != "HOLD" and forecast_price:
         if st.button("🤖 Take AI Advice"):
             st.session_state.trade_log.append({
