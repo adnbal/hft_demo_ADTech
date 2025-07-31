@@ -76,7 +76,7 @@ for asset, price_val in assets.items():
 ticker_html += "</div></div>"
 st.markdown(ticker_html, unsafe_allow_html=True)
 
-# ---------- AI Market Signal with Confidence ----------
+# ---------- AI Market Signal ----------
 def ai_market_signal():
     if len(st.session_state.price_data) < 10:
         return "HOLD", "Collecting more data for better prediction.", None, 50, {}
@@ -98,8 +98,6 @@ def ai_market_signal():
         forecast_price = current_price * (1 + trend_strength)
         change_pct = ((forecast_price - current_price) / current_price) * 100
         reason = f"Price trend bullish. Target: ${forecast_price:.2f} ({change_pct:+.2f}%)."
-        if current_volume > avg_volume:
-            reason += " Strong buying activity."
         metrics = {"Trend Strength": f"{trend_strength*100:.2f}%", "Volume Ratio": f"{volume_ratio:.2f}", "Forecast Change": f"{change_pct:+.2f}%"}
         return "BUY", reason, forecast_price, confidence, metrics
 
@@ -107,8 +105,6 @@ def ai_market_signal():
         forecast_price = current_price * (1 - trend_strength)
         change_pct = ((forecast_price - current_price) / current_price) * 100
         reason = f"Downtrend detected. Target: ${forecast_price:.2f} ({change_pct:+.2f}%)."
-        if current_volume > avg_volume:
-            reason += " High selling pressure."
         metrics = {"Trend Strength": f"{trend_strength*100:.2f}%", "Volume Ratio": f"{volume_ratio:.2f}", "Forecast Change": f"{change_pct:+.2f}%"}
         return "SELL", reason, forecast_price, confidence, metrics
 
@@ -148,7 +144,7 @@ if ai_signal != "HOLD" and forecast_price:
 # ---------- Layout ----------
 left, middle, right = st.columns([1.5, 3, 1.5])
 
-# ---------- AI Panel with Confidence ----------
+# ---------- AI Panel ----------
 with left:
     st.markdown("<div class='panel'>", unsafe_allow_html=True)
     st.markdown("<div style='font-size:22px;font-weight:bold;text-align:center;padding:12px;border-radius:8px;margin-bottom:15px;border:2px solid #00FFFF;box-shadow:0 0 15px #00FFFF,0 0 30px #00FFFF;'>🤖 AI Market Intelligence</div>", unsafe_allow_html=True)
@@ -176,7 +172,7 @@ with left:
         st.session_state.show_modal = True
     st.markdown("</div>", unsafe_allow_html=True)
 
-# ---------- AI Modal with Metrics ----------
+# ---------- AI Modal ----------
 if st.session_state.show_modal:
     st.markdown("""
         <style>
@@ -197,11 +193,12 @@ if st.session_state.show_modal:
         st.session_state.show_modal = False
     st.markdown("</div>", unsafe_allow_html=True)
 
-# ---------- Middle Panel with Candlestick + Depth ----------
+# ---------- Middle Panel with Candlestick, Depth, and PnL ----------
 with middle:
     st.markdown("<div class='panel'>", unsafe_allow_html=True)
     st.markdown("<div style='font-size:22px;font-weight:bold;text-align:center;padding:12px;border-radius:8px;margin-bottom:15px;border:2px solid #FFD700;box-shadow:0 0 15px #FFD700,0 0 30px #FFD700;'>📊 Market Visualization</div>", unsafe_allow_html=True)
 
+    # Candlestick Chart
     if not candles_df.empty:
         candle_fig = go.Figure(data=[go.Candlestick(
             x=candles_df['time'],
@@ -221,3 +218,79 @@ with middle:
     depth_fig.add_trace(go.Bar(x=['Ask'], y=[ask_size], name='Ask', marker=dict(color='red')))
     depth_fig.update_layout(template="plotly_dark", height=250, title="Market Depth")
     st.plotly_chart(depth_fig, use_container_width=True)
+
+    # ---------- PnL Analytics ----------
+    pnl, cum_pnl, open_positions = [], 0, []
+    for trade in st.session_state.trade_log:
+        if trade["side"] == "BUY":
+            open_positions.append((trade["qty"], trade["price"]))
+            cum_pnl -= trade["qty"] * trade["price"]
+        else:
+            if open_positions:
+                qty_to_sell = trade["qty"]
+                while qty_to_sell > 0 and open_positions:
+                    qty_open, price_open = open_positions[0]
+                    if qty_open <= qty_to_sell:
+                        cum_pnl += qty_open * trade["price"]
+                        qty_to_sell -= qty_open
+                        open_positions.pop(0)
+                    else:
+                        cum_pnl += qty_to_sell * trade["price"]
+                        open_positions[0] = (qty_open - qty_to_sell, price_open)
+                        qty_to_sell = 0
+        pnl.append(cum_pnl)
+
+    st.markdown(f"<div style='text-align:center;font-size:30px;font-weight:bold;margin:20px;padding:15px;border-radius:10px;background:#111;border:3px solid white;color:#39ff14;'>💰 TOTAL PROFIT: {cum_pnl:.2f} USD</div>", unsafe_allow_html=True)
+
+    if pnl:
+        pnl_fig = go.Figure()
+        pnl_fig.add_trace(go.Scatter(x=[t["time"] for t in st.session_state.trade_log], y=pnl, mode='lines', name='Realized PnL', line=dict(color='cyan')))
+        pnl_fig.update_layout(template="plotly_dark", title="📊 Realized PnL", height=300)
+        st.plotly_chart(pnl_fig, use_container_width=True)
+
+    # Unrealized PnL
+    current_unrealized = sum((price - pos["price"]) * pos["qty"] for pos in st.session_state.positions)
+    st.session_state.unrealized_history.append(current_unrealized)
+    st.session_state.unrealized_time.append(time.strftime('%H:%M:%S'))
+    unrealized_fig = go.Figure()
+    unrealized_fig.add_trace(go.Scatter(x=st.session_state.unrealized_time, y=st.session_state.unrealized_history, mode='lines+markers', name='Unrealized PnL', line=dict(color='magenta')))
+    unrealized_fig.update_layout(template="plotly_dark", title="📊 Unrealized PnL (Open Positions)", height=300)
+    st.plotly_chart(unrealized_fig, use_container_width=True)
+
+# ---------- Trading Panel ----------
+with right:
+    st.markdown("<div class='panel'>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:22px;font-weight:bold;text-align:center;padding:12px;border-radius:8px;margin-bottom:15px;border:2px solid #FF00FF;box-shadow:0 0 15px #FF00FF,0 0 30px #FF00FF;'>🛠 Trading Panel</div>", unsafe_allow_html=True)
+
+    mode = st.radio("Mode", ["Simulation", "Live"])
+    side = st.radio("Side", ["BUY", "SELL"], index=0 if st.session_state.selected_side == "BUY" else 1)
+    qty = st.number_input("Quantity", min_value=1.0, step=1.0, value=1.0)
+    order_type = st.radio("Order Type", ["MARKET", "LIMIT"])
+    limit_price = st.number_input("Limit Price (USD)", value=st.session_state.limit_price, step=0.01)
+
+    if st.button("Submit Order"):
+        trade_price = price if order_type == "MARKET" else limit_price
+        st.session_state.trade_log.append({"time": time.strftime('%H:%M:%S'), "side": side, "qty": qty, "price": trade_price})
+        if side == "BUY":
+            st.session_state.positions.append({"qty": qty, "price": trade_price})
+        else:
+            if st.session_state.positions:
+                st.session_state.positions.pop(0)
+        st.success(f"Order placed: {side} {qty} @ {trade_price}")
+
+    if ai_signal != "HOLD" and forecast_price:
+        if st.button("🤖 Take AI Advice"):
+            st.session_state.trade_log.append({
+                "time": time.strftime('%H:%M:%S'),
+                "side": ai_signal,
+                "qty": qty,
+                "price": round(forecast_price, 2)
+            })
+            if ai_signal == "BUY":
+                st.session_state.positions.append({"qty": qty, "price": forecast_price})
+            else:
+                if st.session_state.positions:
+                    st.session_state.positions.pop(0)
+            st.success(f"✅ Executed AI Advice: {ai_signal} {qty} @ ${forecast_price:.2f}")
+
+    st.markdown("</div>", unsafe_allow_html=True)
