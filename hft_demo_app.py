@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import requests
-import time
 import random
+import time
 
 # ---------- Page Config ----------
 st.set_page_config(page_title="HFT Dashboard", layout="wide")
@@ -57,24 +57,21 @@ if "unrealized_history" not in st.session_state:
 if "show_modal" not in st.session_state:
     st.session_state.show_modal = False
 
-# ---------- Cached CoinGecko API ----------
+# ---------- Cached API ----------
 @st.cache_data(ttl=60)
 def get_crypto_prices():
     url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,binancecoin,cardano,ripple&vs_currencies=usd"
     try:
-        response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            return response.json()
+        r = requests.get(url, timeout=5)
+        if r.status_code == 200:
+            return r.json()
     except:
         pass
     return {}
 
 data = get_crypto_prices()
-
-# Main price (BTC)
 price = float(data.get("bitcoin", {}).get("usd", 30000))
 
-# Ticker prices
 ticker_prices = {
     "BTC": float(data.get("bitcoin", {}).get("usd", 30000)),
     "ETH": float(data.get("ethereum", {}).get("usd", 2000)),
@@ -96,17 +93,18 @@ def ai_market_signal():
     else:
         return "HOLD", "Market neutral. No strong signal."
 
-# ---------- Ticker Bar ----------
+# ---------- Ticker ----------
 ticker_html = "<div class='ticker-container'><div class='ticker-text'>"
 for asset, val in ticker_prices.items():
-    change = random.uniform(-1.5, 1.5)  # mock % change
-    color_class = "price-up" if change >= 0 else "price-down"
-    ticker_html += f"&nbsp;&nbsp;{asset}: <span class='{color_class}'>{val:.2f}</span> ({change:+.2f}%)&nbsp;&nbsp;|"
+    change = random.uniform(-1.5, 1.5)
+    color = "price-up" if change >= 0 else "price-down"
+    ticker_html += f"{asset}: <span class='{color}'>{val:.2f}</span> ({change:+.2f}%) | "
 ticker_html += "</div></div>"
 st.markdown(ticker_html, unsafe_allow_html=True)
 
-# ---------- Update Price History ----------
-st.session_state.price_data.append((time.strftime('%H:%M:%S'), price, random.randint(50, 200)))
+# ---------- Price History ----------
+volume = random.randint(50, 500)
+st.session_state.price_data.append((time.strftime('%H:%M:%S'), price, volume))
 
 # ---------- Layout ----------
 left, middle, right = st.columns([1.5, 3, 1.5])
@@ -117,109 +115,74 @@ with left:
     st.markdown("<div class='neon'>🤖 AI Market Intelligence</div>", unsafe_allow_html=True)
     ai_signal, ai_text = ai_market_signal()
     color = "#39ff14" if ai_signal == "BUY" else "#ff073a" if ai_signal == "SELL" else "#ffff00"
-    st.markdown(f"""
-        <div style='text-align:center;font-size:24px;font-weight:bold;color:white;
-        background-color:{color};border-radius:10px;padding:12px;margin-bottom:15px;
-        box-shadow:0 0 20px {color},0 0 40px {color};'>{ai_signal}</div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align:center;font-size:24px;font-weight:bold;background-color:{color};padding:12px;border-radius:10px;'>{ai_signal}</div>", unsafe_allow_html=True)
     if st.button("🔍 Why this forecast?"):
         st.session_state.show_modal = True
     st.markdown("</div>", unsafe_allow_html=True)
 
-# ---------- Modal Popup ----------
 if st.session_state.show_modal:
-    modal_html = f"""
-    <div id="myModal" style="
-        position: fixed; z-index: 1000; left: 0; top: 0;
-        width: 100%; height: 100%; background-color: rgba(0,0,0,0.7);
-        display: flex; justify-content: center; align-items: center;">
-        <div style="
-            background-color: #1e1e1e; padding: 20px; border-radius: 10px;
-            width: 50%; max-width: 600px; color: white;
-            box-shadow: 0 0 30px #39ff14;">
-            <h2 style="color:#39ff14;">AI Market Forecast Details</h2>
+    st.markdown(f"""
+    <div style='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:flex;justify-content:center;align-items:center;'>
+        <div style='background:#1e1e1e;padding:20px;border-radius:10px;width:50%;color:white;'>
+            <h3 style='color:#39ff14;'>AI Market Forecast</h3>
             <p><b>Signal:</b> {ai_signal}</p>
             <p><b>Reason:</b> {ai_text}</p>
-            <p>🔍 Based on last 10 interval price trends and market momentum.</p>
-            <button onclick="document.getElementById('myModal').style.display='none';"
-                style="margin-top: 15px; background:#39ff14; color:black; padding:10px 20px; border:none; border-radius:5px; font-weight:bold;">
-                Close
-            </button>
+            <p>Based on last 10 price trends & momentum.</p>
         </div>
     </div>
-    """
-    st.markdown(modal_html, unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 # ---------- Main Panel ----------
 with middle:
     st.markdown("<div class='panel'>", unsafe_allow_html=True)
-    st.markdown("<div class='neon'>⚡ Live Trading Dashboard</div>", unsafe_allow_html=True)
+    st.markdown("<div class='neon'>📈 Price & Volume</div>", unsafe_allow_html=True)
 
     df = pd.DataFrame(st.session_state.price_data, columns=['time', 'price', 'volume'])
 
-    # Price Chart
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df['time'], y=df['price'], mode='lines+markers', name='Price', line=dict(color='lime')))
-    fig.update_layout(template="plotly_dark", xaxis=dict(title="Time"), yaxis=dict(title="Price (USD)"), height=400)
+    fig.add_trace(go.Scatter(x=df['time'], y=df['price'], name="Price", mode='lines+markers', line=dict(color='lime')))
+    fig.add_trace(go.Bar(x=df['time'], y=df['volume'], name="Volume", yaxis="y2", marker=dict(color='blue', opacity=0.5)))
+    fig.update_layout(
+        template="plotly_dark",
+        xaxis=dict(title="Time"),
+        yaxis=dict(title="Price (USD)"),
+        yaxis2=dict(title="Volume", overlaying="y", side="right"),
+        height=400
+    )
     st.plotly_chart(fig, use_container_width=True)
 
-    # Total Profit & PnL
-    pnl, cum_pnl, open_positions = [], 0, []
-    for trade in st.session_state.trade_log:
-        if trade["side"] == "BUY":
-            open_positions.append((trade["qty"], trade["price"]))
-            cum_pnl -= trade["qty"] * trade["price"]
-        else:
-            if open_positions:
-                qty_to_sell = trade["qty"]
-                while qty_to_sell > 0 and open_positions:
-                    qty_open, price_open = open_positions[0]
-                    if qty_open <= qty_to_sell:
-                        cum_pnl += qty_open * trade["price"]
-                        qty_to_sell -= qty_open
-                        open_positions.pop(0)
-                    else:
-                        cum_pnl += qty_to_sell * trade["price"]
-                        open_positions[0] = (qty_open - qty_to_sell, price_open)
-                        qty_to_sell = 0
-        pnl.append(cum_pnl)
+    # Bid/Ask Spread Chart (Simulated)
+    st.subheader("📊 Bid/Ask Spread")
+    bids = sorted([price - random.uniform(0.5, 2) for _ in range(10)], reverse=True)
+    asks = sorted([price + random.uniform(0.5, 2) for _ in range(10)])
+    bid_volumes = [random.randint(1, 10) for _ in bids]
+    ask_volumes = [random.randint(1, 10) for _ in asks]
 
-    st.markdown(f"""
-        <div style='text-align:center;font-size:30px;font-weight:bold;margin:20px;
-        padding:15px;border-radius:10px;background:#111;border:3px solid white;
-        box-shadow:0 0 20px #39ff14,0 0 40px #39ff14;color:#39ff14;'>
-        💰 TOTAL PROFIT: {cum_pnl:.2f} USD
-        </div>
-    """, unsafe_allow_html=True)
+    ba_fig = go.Figure()
+    ba_fig.add_trace(go.Bar(x=bids, y=bid_volumes, name="Bids", marker=dict(color="green")))
+    ba_fig.add_trace(go.Bar(x=asks, y=ask_volumes, name="Asks", marker=dict(color="red")))
+    ba_fig.update_layout(template="plotly_dark", xaxis_title="Price", yaxis_title="Volume", barmode="overlay", height=300)
+    st.plotly_chart(ba_fig, use_container_width=True)
 
-# Unrealized PnL
-    current_unrealized = 0
-    if st.session_state.positions:
-        for pos in st.session_state.positions:
-            current_unrealized += (price - pos["price"]) * pos["qty"]
-    st.session_state.unrealized_history.append(current_unrealized)
-    st.session_state.unrealized_time.append(time.strftime('%H:%M:%S'))
-    unrealized_color = "#39ff14" if current_unrealized >= 0 else "#ff073a"
-    st.markdown(f"""
-        <div style='text-align:center;font-size:22px;font-weight:bold;margin:10px;
-        padding:10px;border-radius:8px;background:#111;border:2px solid {unrealized_color};
-        box-shadow:0 0 15px {unrealized_color};color:{unrealized_color};'>
-        Unrealized PnL: {current_unrealized:.2f} USD
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------- Trading Panel ----------
 with right:
     st.markdown("<div class='panel'>", unsafe_allow_html=True)
     st.markdown("<div class='neon'>🛠 Trading Panel</div>", unsafe_allow_html=True)
+
+    mode = st.radio("Mode", ["Simulation", "Live"])
     side = st.radio("Side", ["BUY", "SELL"])
     qty = st.number_input("Quantity", min_value=0.001, step=0.001, value=0.001)
+    order_type = st.radio("Order Type", ["MARKET", "LIMIT"])
+    limit_price = st.number_input("Limit Price (USD)", value=price, step=0.01)
+
     if st.button("Submit Order"):
-        st.session_state.trade_log.append({"time": time.strftime('%H:%M:%S'), "side": side, "qty": qty, "price": price})
+        trade_price = price if order_type == "MARKET" else limit_price
+        st.session_state.trade_log.append({"time": time.strftime('%H:%M:%S'), "side": side, "qty": qty, "price": trade_price})
         if side == "BUY":
-            st.session_state.positions.append({"qty": qty, "price": price})
-        else:
-            if st.session_state.positions:
-                st.session_state.positions.pop(0)
-        st.success(f"Order placed: {side} {qty} @ {price}")
+            st.session_state.positions.append({"qty": qty, "price": trade_price})
+        elif st.session_state.positions:
+            st.session_state.positions.pop(0)
+        st.success(f"Order placed: {side} {qty} @ {trade_price} ({order_type}) [{mode}]")
     st.markdown("</div>", unsafe_allow_html=True)
