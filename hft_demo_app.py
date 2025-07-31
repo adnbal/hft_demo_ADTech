@@ -1,142 +1,168 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import requests
-import plotly.graph_objects as go
-from streamlit_autorefresh import st_autorefresh
+import hmac
+import hashlib
 import time
+import urllib.parse
+import plotly.graph_objects as go
+from datetime import datetime
+from streamlit_autorefresh import st_autorefresh
 
-# ✅ Page Config
-st.set_page_config(page_title="Advanced HFT Prototype", layout="wide")
-st.title("⚡ Advanced High-Frequency Trading Prototype (Binance Testnet)")
+# ✅ Binance Testnet API Base
+BASE_URL = "https://testnet.binance.vision/api"
 
-# ✅ Sidebar Settings
+# ✅ Streamlit Page Config
+st.set_page_config(page_title="HFT Testnet Trading App", layout="wide")
+st.title("⚡ Advanced HFT Trading Prototype (Binance Testnet)")
+
+# ✅ Sidebar: Settings & Refresh
 st.sidebar.header("⚙️ Settings")
-refresh_interval = st.sidebar.slider("Refresh Interval (seconds)", 1, 5, 2)
-st_autorefresh(interval=refresh_interval * 1000, key="refresh")
+refresh_interval = st.sidebar.slider("Refresh Interval (seconds)", 1, 10, 3)
+auto_refresh = st_autorefresh(interval=refresh_interval * 1000, key="refresh")
 
-# ✅ Session State Initialization
+# ✅ Load Binance API keys from secrets
+API_KEY = st.secrets["binance"]["api_key"]
+API_SECRET = st.secrets["binance"]["api_secret"]
+
+# ✅ Session State
 if "price_data" not in st.session_state:
     st.session_state.price_data = []
 if "trade_log" not in st.session_state:
     st.session_state.trade_log = []
 if "pnl" not in st.session_state:
     st.session_state.pnl = 0.0
-if "pending_order" not in st.session_state:
-    st.session_state.pending_order = None
+if "mode" not in st.session_state:
+    st.session_state.mode = "Simulation"
 
-# ✅ Binance REST API URLs
-PRICE_API = "https://testnet.binance.vision/api/v3/ticker/price?symbol=BTCUSDT"
-ORDER_BOOK_API = "https://testnet.binance.vision/api/v3/depth?symbol=BTCUSDT&limit=5"
+# ✅ Utility: Signature for Binance API
+def sign(params):
+    query_string = urllib.parse.urlencode(params)
+    signature = hmac.new(API_SECRET.encode(), query_string.encode(), hashlib.sha256).hexdigest()
+    return signature
 
-# ✅ Fetch Live Price
-def fetch_live_price():
+# ✅ Get Live Price
+def fetch_price(symbol="BTCUSDT"):
     try:
-        response = requests.get(PRICE_API, timeout=3)
+        response = requests.get(f"{BASE_URL}/v3/ticker/price", params={"symbol": symbol}, timeout=3)
         if response.status_code == 200:
             return float(response.json()["price"])
     except:
         return None
     return None
 
-# ✅ Fetch Order Book
-def fetch_order_book():
+# ✅ Get Order Book
+def fetch_order_book(symbol="BTCUSDT"):
     try:
-        response = requests.get(ORDER_BOOK_API, timeout=3)
+        response = requests.get(f"{BASE_URL}/v3/depth", params={"symbol": symbol, "limit": 5}, timeout=3)
         if response.status_code == 200:
             data = response.json()
-            bids = [(float(price), float(qty)) for price, qty in data["bids"]]
-            asks = [(float(price), float(qty)) for price, qty in data["asks"]]
+            bids = [(float(p), float(q)) for p, q in data["bids"]]
+            asks = [(float(p), float(q)) for p, q in data["asks"]]
             return bids, asks
     except:
         return [], []
     return [], []
 
-# ✅ Update Price & Order Book
-current_price = fetch_live_price()
+# ✅ Account Info
+def fetch_account_info():
+    ts = int(time.time() * 1000)
+    params = {"timestamp": ts}
+    params["signature"] = sign(params)
+    headers = {"X-MBX-APIKEY": API_KEY}
+    try:
+        res = requests.get(f"{BASE_URL}/v3/account", headers=headers, params=params)
+        if res.status_code == 200:
+            return res.json()
+    except:
+        return None
+    return None
+
+# ✅ Place Real Order
+def place_order(symbol, side, order_type, quantity, price=None):
+    ts = int(time.time() * 1000)
+    params = {
+        "symbol": symbol,
+        "side": side,
+        "type": order_type,
+        "quantity": quantity,
+        "timestamp": ts
+    }
+    if order_type == "LIMIT":
+        params["timeInForce"] = "GTC"
+        params["price"] = price
+    params["signature"] = sign(params)
+    headers = {"X-MBX-APIKEY": API_KEY}
+    try:
+        res = requests.post(f"{BASE_URL}/v3/order", headers=headers, params=params)
+        return res.json()
+    except Exception as e:
+        return {"error": str(e)}
+
+# ✅ Fetch Live Data
+price = fetch_price()
 bids, asks = fetch_order_book()
+if price:
+    st.session_state.price_data.append({"time": datetime.now(), "price": price})
 
-if current_price:
-    st.session_state.price_data.append({"time": pd.Timestamp.now(), "price": current_price})
+# ✅ Sidebar: Mode Toggle
+mode = st.sidebar.radio("Select Mode", ["Simulation", "Live Binance Testnet"])
+st.session_state.mode = mode
 
-# ✅ Market-Making Simulation
-def market_maker():
-    if not current_price:
-        return
-    qty = 0.001
-    bid_price = current_price * 0.999
-    ask_price = current_price * 1.001
+# ✅ Sidebar: Account Info
+if mode == "Live Binance Testnet":
+    account = fetch_account_info()
+    if account:
+        balances = {b["asset"]: b["free"] for b in account["balances"] if float(b["free"]) > 0}
+        st.sidebar.subheader("💰 Account Balances")
+        for asset, amt in balances.items():
+            st.sidebar.write(f"{asset}: {amt}")
 
-    buy_executed = np.random.choice([True, False], p=[0.3, 0.7])
-    sell_executed = np.random.choice([True, False], p=[0.3, 0.7])
-
-    trades = []
-    if buy_executed:
-        trades.append({"type": "BUY", "price": round(bid_price, 2), "qty": qty})
-        st.session_state.pnl -= bid_price * qty
-    if sell_executed:
-        trades.append({"type": "SELL", "price": round(ask_price, 2), "qty": qty})
-        st.session_state.pnl += ask_price * qty
-
-    for t in trades:
-        t["time"] = pd.Timestamp.now()
-        st.session_state.trade_log.append(t)
-
-market_maker()
-
-# ✅ Dummy Order UI
-st.sidebar.subheader("🛒 Place Dummy Order")
-order_type = st.sidebar.selectbox("Order Type", ["BUY", "SELL"])
-preferred_price = st.sidebar.number_input("Preferred Price (USDT)", min_value=10000.0, value=30000.0)
-order_qty = st.sidebar.number_input("Order Quantity (BTC)", min_value=0.0001, value=0.001)
+# ✅ Order Placement UI
+st.sidebar.subheader("🛒 Place Order")
+order_type = st.sidebar.selectbox("Order Type", ["MARKET", "LIMIT"])
+side = st.sidebar.selectbox("Side", ["BUY", "SELL"])
+qty = st.sidebar.number_input("Quantity (BTC)", min_value=0.0001, value=0.001)
+price_input = None
+if order_type == "LIMIT":
+    price_input = st.sidebar.number_input("Limit Price (USDT)", min_value=10000.0, value=price if price else 30000.0)
 
 if st.sidebar.button("Submit Order"):
-    st.session_state.pending_order = {
-        "type": order_type,
-        "price": preferred_price,
-        "qty": order_qty,
-        "status": "OPEN",
-        "time": pd.Timestamp.now()
-    }
-    st.sidebar.success(f"Order placed: {order_type} {order_qty} BTC at {preferred_price} USDT")
+    if mode == "Simulation":
+        st.session_state.trade_log.append({
+            "time": datetime.now(),
+            "side": side,
+            "price": price_input if price_input else price,
+            "qty": qty,
+            "status": "SIMULATED"
+        })
+        st.sidebar.success("✅ Simulated order placed")
+    else:
+        result = place_order("BTCUSDT", side, order_type, qty, price_input)
+        if "orderId" in result:
+            st.session_state.trade_log.append({
+                "time": datetime.now(),
+                "side": side,
+                "price": price_input if price_input else price,
+                "qty": qty,
+                "status": "LIVE"
+            })
+            st.sidebar.success(f"✅ Order executed: {result['orderId']}")
+        else:
+            st.sidebar.error(f"Error: {result}")
 
-# ✅ Check Dummy Order Execution
-if st.session_state.pending_order and st.session_state.pending_order["status"] == "OPEN":
-    if current_price:
-        if (st.session_state.pending_order["type"] == "BUY" and current_price <= st.session_state.pending_order["price"]) or \
-           (st.session_state.pending_order["type"] == "SELL" and current_price >= st.session_state.pending_order["price"]):
-            executed_order = st.session_state.pending_order
-            executed_order["status"] = "FILLED"
-            executed_order["execution_price"] = current_price
-            st.session_state.trade_log.append(executed_order)
-
-            # Update P&L
-            if executed_order["type"] == "BUY":
-                st.session_state.pnl -= current_price * executed_order["qty"]
-            else:
-                st.session_state.pnl += current_price * executed_order["qty"]
-
-            st.sidebar.success(f"✅ Order executed at {current_price} USDT")
-            st.session_state.pending_order = None
-
-# ✅ Debug Info
-st.write(f"DEBUG: Price ticks received = {len(st.session_state.price_data)} | Current Price: {current_price}")
-
-# ✅ Layout: Price Chart and Order Book
+# ✅ Charts: Price & Order Book
 col1, col2 = st.columns(2)
-
-# ✅ Price Chart
 with col1:
     st.subheader("📈 Live BTC/USDT Price")
-    if len(st.session_state.price_data) > 0:
+    if len(st.session_state.price_data) > 1:
         df_price = pd.DataFrame(st.session_state.price_data[-100:])
         fig = go.Figure(go.Scatter(x=df_price["time"], y=df_price["price"], mode="lines+markers", line=dict(color="blue")))
         fig.update_layout(title="BTC/USDT Price", xaxis_title="Time", yaxis_title="Price")
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("⏳ Waiting for price data from Binance Testnet...")
+        st.info("Waiting for price data...")
 
-# ✅ Order Book Chart
 with col2:
     st.subheader("📊 Order Book Depth")
     if bids and asks:
@@ -148,11 +174,13 @@ with col2:
         fig_ob.update_layout(barmode="overlay", title="Order Book Depth", xaxis_title="Price", yaxis_title="Qty")
         st.plotly_chart(fig_ob, use_container_width=True)
     else:
-        st.info("⏳ Fetching order book data...")
+        st.info("Fetching order book...")
 
-# ✅ Trade Log and P&L
-st.subheader("📜 Trade Log & P&L")
-if len(st.session_state.trade_log) > 0:
-    df_trades = pd.DataFrame(st.session_state.trade_log[-20:])
-    st.metric("💰 Simulated P&L", f"{st.session_state.pnl:.2f} USDT")
+# ✅ Trade Log
+st.subheader("📜 Trade Log")
+if st.session_state.trade_log:
+    df_trades = pd.DataFrame(st.session_state.trade_log)
     st.dataframe(df_trades)
+else:
+    st.info("No trades yet.")
+
