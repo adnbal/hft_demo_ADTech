@@ -29,7 +29,7 @@ recent_prices = [p["price"] for p in st.session_state.price_data[-10:]]
 signal = "HOLD"
 reason = "Collecting more data for better prediction."
 forecast = ""
-color = "#FFD700"  # Yellow default for HOLD
+color = "#FFD700"  # Yellow for HOLD
 
 if len(recent_prices) >= 10:
     trend = np.polyfit(range(len(recent_prices)), recent_prices, 1)[0]
@@ -55,42 +55,33 @@ st.markdown(f"""
     .main > div {{
         padding-top: 0rem;
     }}
-    /* Neon Titles */
+    /* Neon Titles (clean font, no highlight inside text) */
     .neon-title {{
-        font-size: 24px;
+        font-size: 22px;
         font-weight: bold;
         text-align: center;
         color: white;
-        background: rgba(30, 41, 59, 0.95);
+        border: 2px solid {color};
         border-radius: 12px;
         padding: 10px;
-        margin-bottom: 10px;
-        text-shadow: 0 0 20px {color}, 0 0 40px {color};
-        border: 2px solid {color};
+        margin-bottom: 15px;
+        text-shadow: none;
+        box-shadow: 0 0 15px {color}, 0 0 30px {color};
     }}
-    /* Neon AI Box */
+    /* AI Signal Box */
     .neon-box {{
         border: 2px solid {color};
-        border-radius: 15px;
-        padding: 15px;
-        text-align: center;
-        font-size: 22px;
-        font-weight: bold;
-        color: {color};
-        animation: glow 1.5s infinite alternate;
-    }}
-    @keyframes glow {{
-        from {{ box-shadow: 0 0 15px {color}; }}
-        to {{ box-shadow: 0 0 35px {color}; }}
-    }}
-    /* Grey Right Panel Full Height */
-    .right-panel {{
-        background-color: #1f2937;
         border-radius: 12px;
-        padding: 20px;
-        height: 100%;
+        padding: 12px;
+        text-align: center;
+        font-size: 24px;
+        font-weight: bold;
+        color: white;
+        box-shadow: 0 0 15px {color}, 0 0 30px {color};
+        margin-bottom: 15px;
     }}
-    .left-panel {{
+    /* Side Panels */
+    .left-panel, .right-panel {{
         background-color: #1f2937;
         border-radius: 12px;
         padding: 20px;
