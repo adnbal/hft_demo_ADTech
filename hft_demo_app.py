@@ -9,7 +9,7 @@ from streamlit_autorefresh import st_autorefresh
 # ---------- Page Config ----------
 st.set_page_config(page_title="HFT Dashboard", layout="wide")
 
-# ---------- Auto-refresh every 5 seconds ----------
+# ---------- Auto-refresh ----------
 st_autorefresh(interval=5000, key="refresh")
 
 # ---------- Custom CSS ----------
@@ -61,6 +61,12 @@ if "unrealized_history" not in st.session_state:
 if "show_modal" not in st.session_state:
     st.session_state.show_modal = False
 
+# Initialize UI sync states
+if "selected_side" not in st.session_state:
+    st.session_state.selected_side = "BUY"
+if "limit_price" not in st.session_state:
+    st.session_state.limit_price = 30000.0
+
 # ---------- Mock Live Price ----------
 def get_live_price():
     base_price = 30000
@@ -82,7 +88,7 @@ for asset, price_val in assets.items():
 ticker_html += "</div></div>"
 st.markdown(ticker_html, unsafe_allow_html=True)
 
-# ---------- AI Market Signal with Price Forecast ----------
+# ---------- AI Market Signal ----------
 def ai_market_signal():
     if len(st.session_state.price_data) < 10:
         return "HOLD", "Collecting more data for better prediction.", None
@@ -126,7 +132,6 @@ with left:
     ai_signal, ai_text, forecast_price = ai_market_signal()
     color = "#39ff14" if ai_signal == "BUY" else "#ff073a" if ai_signal == "SELL" else "#ffff00"
     
-    # Neon border only (no fill)
     st.markdown(f"""
         <div style='
             text-align:center;
@@ -185,7 +190,7 @@ with middle:
     st.markdown("<div class='panel'>", unsafe_allow_html=True)
     st.markdown("<div class='neon'>⚡ High Frequency Trading Dashboard</div>", unsafe_allow_html=True)
 
-    # Price + Volume Chart (Green line on top, Orange bars)
+    # Price + Volume Chart
     fig = go.Figure()
     fig.add_trace(go.Bar(x=df['time'], y=df['volume'], name='Volume', yaxis='y2', marker=dict(color='orange', opacity=0.5)))
     fig.add_trace(go.Scatter(x=df['time'], y=df['price'], mode='lines+markers', name='Price', line=dict(color='lime', width=3)))
@@ -234,77 +239,24 @@ with middle:
         pnl_fig.update_layout(template="plotly_dark", title="📊 Realized PnL", height=300)
         st.plotly_chart(pnl_fig, use_container_width=True)
 
-    # Unrealized PnL
-    current_unrealized = 0
-    for pos in st.session_state.positions:
-        current_unrealized += (price - pos["price"]) * pos["qty"]
-    st.session_state.unrealized_history.append(current_unrealized)
-    st.session_state.unrealized_time.append(time.strftime('%H:%M:%S'))
-    unrealized_fig = go.Figure()
-    unrealized_fig.add_trace(go.Scatter(x=st.session_state.unrealized_time,
-                                        y=st.session_state.unrealized_history,
-                                        mode='lines+markers', name='Unrealized PnL',
-                                        line=dict(color='magenta')))
-    unrealized_fig.update_layout(template="plotly_dark", title="📊 Unrealized PnL", height=300)
-    st.plotly_chart(unrealized_fig, use_container_width=True)
-
-    # Cumulative PnL (Last 5 Hours)
-    now = datetime.now()
-    five_hours_ago = now - timedelta(hours=5)
-    trade_times, cumulative_pnl, cum_pnl_5h = [], [], 0
-    open_positions_5h = []
-    for trade in st.session_state.trade_log:
-        trade_time = datetime.strptime(trade["time"], "%H:%M:%S")
-        trade_time = datetime.combine(now.date(), trade_time.time())
-        if trade_time >= five_hours_ago:
-            if trade["side"] == "BUY":
-                open_positions_5h.append((trade["qty"], trade["price"]))
-                cum_pnl_5h -= trade["qty"] * trade["price"]
-            else:
-                if open_positions_5h:
-                    qty_to_sell = trade["qty"]
-                    while qty_to_sell > 0 and open_positions_5h:
-                        qty_open, price_open = open_positions_5h[0]
-                        if qty_open <= qty_to_sell:
-                            cum_pnl_5h += qty_open * trade["price"]
-                            qty_to_sell -= qty_open
-                            open_positions_5h.pop(0)
-                        else:
-                            cum_pnl_5h += qty_to_sell * trade["price"]
-                            open_positions_5h[0] = (qty_open - qty_to_sell, price_open)
-                            qty_to_sell = 0
-            trade_times.append(trade_time)
-            cumulative_pnl.append(cum_pnl_5h)
-    if trade_times:
-        cum_pnl_fig = go.Figure()
-        cum_pnl_fig.add_trace(go.Scatter(x=trade_times, y=cumulative_pnl,
-                                         mode='lines+markers', name='Cumulative PnL',
-                                         line=dict(color='orange')))
-        cum_pnl_fig.update_layout(template="plotly_dark", title="💰 Cumulative Profit (Last 5 Hours)", height=300)
-        st.plotly_chart(cum_pnl_fig, use_container_width=True)
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
 # ---------- Trading Panel ----------
 with right:
     st.markdown("<div class='panel'>", unsafe_allow_html=True)
     st.markdown("<div class='neon'>🛠 Trading Panel</div>", unsafe_allow_html=True)
+
+    # AI Sync Button
+    if ai_signal != "HOLD" and forecast_price:
+        if st.button("🔄 Sync AI Advice to Inputs"):
+            st.session_state.selected_side = ai_signal
+            st.session_state.limit_price = round(forecast_price, 2)
+
+    # Inputs (controlled via session state)
     mode = st.radio("Mode", ["Simulation", "Live"])
-    side = st.radio("Side", ["BUY", "SELL"])
+    side = st.radio("Side", ["BUY", "SELL"], index=0 if st.session_state.selected_side == "BUY" else 1)
     qty = st.number_input("Quantity", min_value=1.0, step=1.0, value=1.0)
-
-    # Dynamic suggested price
-    if ai_signal == "BUY":
-        suggested_price = price * 1.002
-    elif ai_signal == "SELL":
-        suggested_price = price * 0.998
-    else:
-        suggested_price = price
-
     order_type = st.radio("Order Type", ["MARKET", "LIMIT"])
-    limit_price = st.number_input("Limit Price (USD)", value=round(suggested_price, 2), step=0.01)
+    limit_price = st.number_input("Limit Price (USD)", value=st.session_state.limit_price, step=0.01)
 
-    # Manual Submit
     if st.button("Submit Order"):
         trade_price = price if order_type == "MARKET" else limit_price
         st.session_state.trade_log.append({"time": time.strftime('%H:%M:%S'), "side": side, "qty": qty, "price": trade_price})
@@ -315,7 +267,7 @@ with right:
                 st.session_state.positions.pop(0)
         st.success(f"Order placed: {side} {qty} @ {trade_price}")
 
-    # ✅ AI Auto-Trade Button
+    # AI Auto-Trade Button
     if ai_signal != "HOLD" and forecast_price:
         if st.button("🤖 Take AI Advice"):
             st.session_state.trade_log.append({
