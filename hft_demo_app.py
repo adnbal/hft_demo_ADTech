@@ -7,44 +7,44 @@ from streamlit_autorefresh import st_autorefresh
 from datetime import datetime
 import random
 
-# -------------------- PAGE CONFIG --------------------
+# ---------------- PAGE CONFIG ----------------
 st.set_page_config(page_title="AI HFT Dashboard", layout="wide")
 
-# -------------------- SESSION STATE --------------------
+# ---------------- SESSION STATE ----------------
 if "price_data" not in st.session_state:
     st.session_state.price_data = []
 if "trade_log" not in st.session_state:
     st.session_state.trade_log = []
 
-# -------------------- AUTO REFRESH --------------------
+# ---------------- AUTO REFRESH ----------------
 st_autorefresh(interval=5000, key="auto-refresh")
 
-# -------------------- PRICE SIMULATION --------------------
+# ---------------- PRICE SIMULATION ----------------
 price = 30000 + np.random.randn() * 50
 volume = random.randint(10, 100)
 st.session_state.price_data.append({"time": datetime.now(), "price": price, "volume": volume})
 
-# -------------------- AI SIGNAL --------------------
+# ---------------- AI SIGNAL ----------------
 recent_prices = [p["price"] for p in st.session_state.price_data[-10:]]
 signal = "HOLD"
 reason = "Collecting more data for better prediction."
 forecast = ""
-color = "#39ff14"  # Default green for glow
+color = "#FFD700"  # Yellow default for HOLD
 
 if len(recent_prices) >= 10:
     trend = np.polyfit(range(len(recent_prices)), recent_prices, 1)[0]
     if trend > 0:
         signal = "BUY"
-        reason = "Price trend is upward, indicating bullish momentum."
-        forecast = "Expected ~0.8% rise in next few minutes."
-        color = "#39ff14"  # Green glow for BUY
+        reason = "Upward trend → bullish momentum."
+        forecast = "Expected +0.8% in next few mins."
+        color = "#39ff14"  # Neon green
     elif trend < 0:
         signal = "SELL"
-        reason = "Price trend is downward, indicating bearish momentum."
-        forecast = "Expected ~0.7% drop in next few minutes."
-        color = "#ff073a"  # Red glow for SELL
+        reason = "Downward trend → bearish pressure."
+        forecast = "Expected -0.7% in next few mins."
+        color = "#FF073A"  # Neon red
 
-# -------------------- CUSTOM CSS --------------------
+# ---------------- CUSTOM CSS ----------------
 st.markdown(f"""
     <style>
     body {{
@@ -53,76 +53,83 @@ st.markdown(f"""
         margin: 0;
     }}
     .main > div {{
-        padding-top: 0rem;  /* Remove empty space at top */
+        padding-top: 0rem;
     }}
-    .sidebar .sidebar-content {{
-        background: #1e293b;
-        padding: 15px;
-        border-radius: 10px;
-    }}
-    .right-panel {{
-        background: #1e293b;
-        padding: 15px;
-        border-radius: 10px;
-        min-height: 100%;
-    }}
+    /* Neon Titles */
     .neon-title {{
         font-size: 24px;
         font-weight: bold;
         text-align: center;
-        color: {color};
-        text-shadow: 0 0 20px {color}, 0 0 30px {color};
-        border: 2px solid {color};
+        color: white;
+        background: rgba(30, 41, 59, 0.95);
         border-radius: 12px;
         padding: 10px;
         margin-bottom: 10px;
+        text-shadow: 0 0 20px {color}, 0 0 40px {color};
+        border: 2px solid {color};
     }}
+    /* Neon AI Box */
     .neon-box {{
         border: 2px solid {color};
         border-radius: 15px;
         padding: 15px;
         text-align: center;
-        font-size: 18px;
+        font-size: 22px;
         font-weight: bold;
         color: {color};
         animation: glow 1.5s infinite alternate;
     }}
     @keyframes glow {{
-        from {{ box-shadow: 0 0 10px {color}; }}
-        to {{ box-shadow: 0 0 25px {color}; }}
+        from {{ box-shadow: 0 0 15px {color}; }}
+        to {{ box-shadow: 0 0 35px {color}; }}
+    }}
+    /* Grey Right Panel Full Height */
+    .right-panel {{
+        background-color: #1f2937;
+        border-radius: 12px;
+        padding: 20px;
+        height: 100%;
+    }}
+    .left-panel {{
+        background-color: #1f2937;
+        border-radius: 12px;
+        padding: 20px;
+        height: 100%;
     }}
     </style>
 """, unsafe_allow_html=True)
 
-# -------------------- LAYOUT --------------------
-col_ai, col_main, col_trade = st.columns([0.4, 1.2, 0.6])
+# ---------------- LAYOUT ----------------
+col_ai, col_main, col_trade = st.columns([0.35, 1.3, 0.6])
 
-# ---------- AI PANEL ----------
+# ---- LEFT AI PANEL ----
 with col_ai:
+    st.markdown("<div class='left-panel'>", unsafe_allow_html=True)
     st.markdown(f"<div class='neon-title'>🤖 AI Market Intelligence</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='neon-box'>{signal}</div>", unsafe_allow_html=True)
     st.write(reason)
     st.write(forecast)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-# ---------- MAIN PANEL ----------
+# ---- MIDDLE MAIN PANEL ----
 with col_main:
     st.markdown(f"<div class='neon-title'>⚡ High Frequency Trading Dashboard</div>", unsafe_allow_html=True)
 
     # Price & Volume Chart
-    df = pd.DataFrame(st.session_state.price_data[-100:])
+    df = pd.DataFrame(st.session_state.price_data[-50:])
     if not df.empty:
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=df["time"], y=df["price"], mode="lines+markers",
-                                 name="Price", line=dict(color="lime", width=3)))
+                                 name="Price", line=dict(color=color, width=3)))
         fig.add_trace(go.Bar(x=df["time"], y=df["volume"], name="Volume",
-                             marker_color="blue", opacity=0.3, yaxis="y2"))
+                             marker_color="blue", opacity=0.4, yaxis="y2"))
         fig.update_layout(template="plotly_dark",
                           yaxis=dict(title="Price (USD)"),
                           yaxis2=dict(title="Volume", overlaying="y", side="right"),
                           height=400)
         st.plotly_chart(fig, use_container_width=True)
 
-    # P&L Line Chart
+    # P&L Chart
     pnl = [random.uniform(-100, 150) for _ in range(len(df))]
     st.markdown(f"<div class='neon-title'>📊 P&L Analysis</div>", unsafe_allow_html=True)
     fig_pnl = go.Figure()
@@ -135,7 +142,7 @@ with col_main:
     trade_df = pd.DataFrame(st.session_state.trade_log)
     st.dataframe(trade_df if not trade_df.empty else pd.DataFrame(columns=["time", "side", "qty", "price"]))
 
-# ---------- TRADING PANEL ----------
+# ---- RIGHT TRADING PANEL ----
 with col_trade:
     st.markdown("<div class='right-panel'>", unsafe_allow_html=True)
     st.markdown(f"<div class='neon-title'>🛠 Trading Panel</div>", unsafe_allow_html=True)
