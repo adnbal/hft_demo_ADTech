@@ -9,31 +9,51 @@ import time
 # -------------------- PAGE CONFIG --------------------
 st.set_page_config(page_title="HFT AI Dashboard", layout="wide")
 
-# -------------------- CUSTOM CSS --------------------
+# -------------------- CUSTOM CSS FOR FIXED AI PANEL --------------------
 st.markdown("""
     <style>
+    /* Add body padding so content doesn't hide under fixed AI panel */
+    body {
+        padding-top: 180px; /* space for fixed header */
+    }
+
+    /* Fixed AI Intelligence Panel */
     .fixed-ai-panel {
-        position: sticky;
+        position: fixed;
         top: 0;
-        z-index: 999;
+        left: 0;
+        right: 0;
+        z-index: 9999;
         background-color: #0e1117;
         padding: 15px;
-        margin-bottom: 10px;
-        border-radius: 10px;
-        border: 2px solid #39FF14;
-        box-shadow: 0px 0px 20px #39FF14;
+        text-align: left;
+        border-radius: 0 0 15px 15px;
+        animation: neonPulse 1.5s infinite alternate;
     }
+
+    /* Neon Glow Animation */
+    @keyframes neonPulse {
+        from {
+            box-shadow: 0 0 10px #39FF14, 0 0 20px #39FF14;
+            border: 2px solid #39FF14;
+        }
+        to {
+            box-shadow: 0 0 25px #39FF14, 0 0 50px #39FF14;
+            border: 2px solid #39FF14;
+        }
+    }
+
     .buy-signal {
         color: #39FF14;
-        font-size: 20px;
+        font-size: 22px;
         font-weight: bold;
-        text-shadow: 0 0 10px #39FF14;
+        text-shadow: 0 0 15px #39FF14;
     }
     .sell-signal {
         color: #FF3131;
-        font-size: 20px;
+        font-size: 22px;
         font-weight: bold;
-        text-shadow: 0 0 10px #FF3131;
+        text-shadow: 0 0 15px #FF3131;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -82,7 +102,7 @@ st.markdown("### 🤖 AI Market Intelligence")
 st.markdown(ai_message, unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
 
-# -------------------- DASHBOARD TITLE --------------------
+# -------------------- MAIN DASHBOARD --------------------
 st.title("⚡ High Frequency Trading AI Dashboard")
 st.caption("Simulated BTC/USDT Trading with AI Insights")
 
@@ -92,22 +112,17 @@ df = pd.DataFrame(st.session_state.price_data)
 
 if not df.empty:
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    # Price line
+    # Price
     fig.add_trace(go.Scatter(
         x=df['time'], y=df['price'], mode='lines+markers',
         name='Price', line=dict(color='lime', width=3)
     ), secondary_y=False)
-
-    # Volume bars
+    # Volume
     fig.add_trace(go.Bar(
         x=df['time'], y=df['volume'], name='Volume',
         marker=dict(color='rgba(0,150,255,0.5)')
     ), secondary_y=True)
-
-    fig.update_layout(
-        template="plotly_dark", margin=dict(l=0, r=0, t=30, b=0),
-        showlegend=True, height=400
-    )
+    fig.update_layout(template="plotly_dark", height=400)
     fig.update_yaxes(title_text="BTC Price (USD)", secondary_y=False)
     fig.update_yaxes(title_text="Volume", secondary_y=True)
     st.plotly_chart(fig, use_container_width=True)
@@ -136,7 +151,7 @@ st.subheader("📜 Trade Log")
 df_trades = pd.DataFrame(st.session_state.trade_log)
 st.dataframe(df_trades if not df_trades.empty else pd.DataFrame(columns=["No trades yet."]))
 
-# -------------------- P&L CHART --------------------
+# -------------------- P&L --------------------
 st.subheader("📊 Realized & Unrealized P&L")
 realized_pnl = 0.0
 unrealized_pnl = 0.0
@@ -144,14 +159,10 @@ current_price = price
 for pos in st.session_state.positions:
     unrealized_pnl += (current_price - pos["price"]) * pos["qty"]
 
-pnl_df = pd.DataFrame({
-    "Type": ["Realized", "Unrealized"],
-    "Value": [realized_pnl, unrealized_pnl]
-})
-
+pnl_df = pd.DataFrame({"Type": ["Realized", "Unrealized"], "Value": [realized_pnl, unrealized_pnl]})
 st.bar_chart(pnl_df.set_index("Type"))
 
-# NEW P&L Trend Chart
+# -------------------- P&L TREND --------------------
 if not df_trades.empty:
     df_trades['PnL'] = (df_trades['price'] - df_trades['price'].shift(1)).fillna(0).cumsum()
     st.line_chart(df_trades.set_index('time')['PnL'])
@@ -169,6 +180,5 @@ st.table(metrics_df)
 
 # -------------------- AUTO REFRESH --------------------
 st.caption("Refreshing every 5 seconds...")
-st_autorefresh = st.experimental_singleton(lambda: None)
 time.sleep(5)
 st.experimental_rerun()
