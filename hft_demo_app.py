@@ -1,12 +1,17 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
-from datetime import datetime
-import random
 import time
+from datetime import datetime
+import plotly.graph_objects as go
+from streamlit_autorefresh import st_autorefresh
 
-# ---------------- SESSION STATE ----------------
+# -------------------- PAGE CONFIG --------------------
+st.set_page_config(page_title="⚡ HFT AI Dashboard", layout="wide")
+st.title("⚡ High Frequency Trading AI Dashboard")
+st.caption("Simulated BTC/USDT Trading with AI Insights")
+
+# -------------------- SESSION STATE --------------------
 if "price_data" not in st.session_state:
     st.session_state.price_data = []
 if "trade_log" not in st.session_state:
@@ -14,141 +19,131 @@ if "trade_log" not in st.session_state:
 if "positions" not in st.session_state:
     st.session_state.positions = []
 
-st.set_page_config(page_title="HFT AI Dashboard", layout="wide")
-
-# ---------------- STYLES ----------------
-st.markdown("""
-<style>
-.neon-card {
-    background-color: #0e1117;
-    padding: 15px;
-    border-radius: 12px;
-    color: white;
-    font-size: 18px;
-    text-shadow: 0 0 10px #00FF00;
-    border: 2px solid #00FF00;
-    box-shadow: 0 0 15px #00FF00;
-}
-.red-glow {
-    border: 2px solid #FF0033;
-    box-shadow: 0 0 15px #FF0033;
-    text-shadow: 0 0 10px #FF0033;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# ---------------- HEADER ----------------
-st.title("⚡ High Frequency Trading AI Dashboard")
-st.caption("Simulated BTC/USDT Trading with AI Insights")
-
-# ---------------- TRADING PANEL ----------------
+# -------------------- SIDEBAR --------------------
 st.sidebar.header("🛠 Trading Panel")
 mode = st.sidebar.radio("Mode", ["Simulation", "Live"])
 side = st.sidebar.radio("Side", ["BUY", "SELL"])
-qty = st.sidebar.number_input("Quantity", min_value=1, value=5)
+qty = st.sidebar.number_input("Quantity", min_value=1.0, step=1.0)
 order_type = st.sidebar.radio("Order Type", ["MARKET", "LIMIT"])
-price_input = st.sidebar.number_input("Limit Price", min_value=0.0, value=0.0)
+limit_price = st.sidebar.number_input("Limit Price", min_value=1.0, step=0.01)
+submit = st.sidebar.button("Submit Order")
 
-if st.sidebar.button("Submit Order"):
-    current_price = st.session_state.price_data[-1]["price"] if st.session_state.price_data else 30000
-    trade_price = price_input if order_type == "LIMIT" else current_price
-    st.session_state.trade_log.append({
-        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "side": side,
-        "qty": qty,
-        "price": trade_price
-    })
+# -------------------- SIMULATE PRICE STREAM --------------------
+price = 30000 + np.random.randn() * 50  # base price with noise
+volume = np.random.randint(10, 100)
+
+st.session_state.price_data.append({"time": datetime.now(), "price": price, "volume": volume})
+if len(st.session_state.price_data) > 500:
+    st.session_state.price_data.pop(0)
+
+# -------------------- EXECUTE ORDERS --------------------
+if submit:
+    trade_price = price if order_type == "MARKET" else limit_price
+    st.session_state.trade_log.append({"time": datetime.now(), "side": side, "qty": qty, "price": trade_price})
     if side == "BUY":
-        st.session_state.positions.append({"qty": qty, "price": trade_price})
+        st.session_state.positions.append({"price": trade_price, "qty": qty})
     elif side == "SELL" and st.session_state.positions:
-        st.session_state.positions.pop(0)
+        sell_qty = qty
+        while sell_qty > 0 and st.session_state.positions:
+            pos = st.session_state.positions.pop(0)
+            sell_qty -= pos["qty"]
 
-# ---------------- SIMULATED PRICE FEED ----------------
-price = 30000 if not st.session_state.price_data else st.session_state.price_data[-1]["price"]
-price += np.random.uniform(-50, 50)
-volume = np.random.randint(50, 200)
-st.session_state.price_data.append({
-    "time": datetime.now().strftime("%H:%M:%S"),
-    "price": price,
-    "volume": volume
-})
-df = pd.DataFrame(st.session_state.price_data[-100:])
-
-# ---------------- PRICE & VOLUME CHART ----------------
+# -------------------- LIVE PRICE & VOLUME CHART --------------------
 st.subheader("📈 Live BTC Price & Volume")
+df = pd.DataFrame(st.session_state.price_data)
+
 fig = go.Figure()
-fig.add_trace(go.Scatter(x=df['time'], y=df['price'], mode='lines+markers',
-                         name='Price', line=dict(color='lime', width=3)))
-fig.add_trace(go.Bar(x=df['time'], y=df['volume'], name='Volume', yaxis='y2', opacity=0.3))
+
+# Price Line
+fig.add_trace(go.Scatter(x=df['time'], y=df['price'], mode='lines', name='Price', line=dict(color='lime', width=2)))
+
+# Volume Bars on Secondary Axis
+fig.add_trace(go.Bar(x=df['time'], y=df['volume'], name='Volume', marker_color='rgba(0, 200, 255, 0.5)', yaxis='y2'))
+
 fig.update_layout(
-    yaxis=dict(title="Price"),
+    template="plotly_dark",
+    height=400,
+    margin=dict(l=20, r=20, t=30, b=20),
+    xaxis=dict(title="Time"),
+    yaxis=dict(title="Price (USD)"),
     yaxis2=dict(title="Volume", overlaying='y', side='right'),
-    template="plotly_dark", height=400
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
 )
 st.plotly_chart(fig, use_container_width=True)
 
-# ---------------- TRADE LOG ----------------
+# -------------------- TRADE LOG --------------------
 st.subheader("📜 Trade Log")
-if st.session_state.trade_log:
-    st.dataframe(pd.DataFrame(st.session_state.trade_log).tail(10), height=200)
+df_trades = pd.DataFrame(st.session_state.trade_log)
+if not df_trades.empty:
+    st.dataframe(df_trades.tail(10), use_container_width=True)
 else:
-    st.info("No trades yet.")
+    st.write("No trades yet.")
 
-# ---------------- P&L ----------------
+# -------------------- P&L (BAR CHART FIX) --------------------
 st.subheader("📊 Realized & Unrealized P&L")
+
+# Compute P&L
 realized_pnl = 0.0
 unrealized_pnl = 0.0
 current_price = price
 
 for t in st.session_state.trade_log:
-    if t["side"] == "SELL":
-        realized_pnl += (t["price"] - st.session_state.positions[0]["price"]) * t["qty"] if st.session_state.positions else 0
+    if t["side"] == "SELL" and st.session_state.positions:
+        realized_pnl += (t["price"] - st.session_state.positions[0]["price"]) * t["qty"]
+
 for pos in st.session_state.positions:
     unrealized_pnl += (current_price - pos["price"]) * pos["qty"]
 
-pnl_fig = go.Figure()
-pnl_fig.add_trace(go.Indicator(mode="number+delta", value=realized_pnl, title="Realized P&L", delta={"reference": 0}))
-pnl_fig.add_trace(go.Indicator(mode="number+delta", value=unrealized_pnl, title="Unrealized P&L", delta={"reference": 0}))
-pnl_fig.update_layout(template="plotly_dark", height=200)
+# Bar chart for P&L
+pnl_fig = go.Figure(data=[
+    go.Bar(name="Realized P&L", x=[realized_pnl], y=["P&L"], orientation='h', marker=dict(color="lime")),
+    go.Bar(name="Unrealized P&L", x=[unrealized_pnl], y=["P&L"], orientation='h', marker=dict(color="yellow"))
+])
+pnl_fig.update_layout(
+    template="plotly_dark",
+    barmode='stack',
+    height=250,
+    title="P&L Overview"
+)
 st.plotly_chart(pnl_fig, use_container_width=True)
 
-# ---------------- PORTFOLIO METRICS ----------------
+# -------------------- PORTFOLIO METRICS --------------------
 st.subheader("📊 Portfolio Metrics")
-open_pos = sum([p["qty"] for p in st.session_state.positions])
-avg_price = np.mean([p["price"] for p in st.session_state.positions]) if st.session_state.positions else 0
-current_val = open_pos * current_price
+open_position = sum(pos["qty"] for pos in st.session_state.positions)
+current_value = open_position * current_price
+avg_entry_price = np.mean([pos["price"] for pos in st.session_state.positions]) if st.session_state.positions else 0
+
 metrics = pd.DataFrame({
     "Metric": ["Open Position (BTC)", "Current Value (USD)", "Average Entry Price"],
-    "Value": [open_pos, f"${current_val:,.2f}", f"${avg_price:,.2f}"]
+    "Value": [open_position, f"${current_value:,.2f}", f"${avg_entry_price:,.2f}"]
 })
 st.table(metrics)
 
-# ---------------- AI MARKET INTELLIGENCE ----------------
+# -------------------- AI MARKET INTELLIGENCE --------------------
 st.subheader("🤖 AI Market Intelligence")
 
-# Generate AI Recommendation
-if len(df) > 5:
-    price_change = df['price'].iloc[-1] - df['price'].iloc[-5]
-    signal = "BUY" if price_change > 0 else "SELL"
-    color_class = "" if signal == "BUY" else " red-glow"
-    expected_move = round(np.random.uniform(0.3, 1.2), 2)
-    forecast_price = df['price'].iloc[-1] * (1 + (expected_move / 100 if signal == "BUY" else -expected_move / 100))
-    rationale = "Price trend is upward, indicating bullish momentum." if signal == "BUY" else "Bearish trend detected; sellers dominate."
-    confidence = random.choice(["High", "Medium", "Low"])
+if len(df) > 10:
+    price_change = df['price'].iloc[-1] - df['price'].iloc[-10]
+    if price_change > 0:
+        signal = "BUY"
+        reason = "Price trend is upward, indicating bullish momentum. Buyers dominate order flow."
+        forecast = f"Price expected to rise by ~{abs(price_change/current_price)*100:.2f}% in next few minutes based on volatility patterns."
+    else:
+        signal = "SELL"
+        reason = "Price trend is downward, indicating bearish pressure. Sellers dominate order flow."
+        forecast = f"Price expected to drop by ~{abs(price_change/current_price)*100:.2f}% in next few minutes due to strong resistance levels."
 
     st.markdown(f"""
-    <div class="neon-card{color_class}">
-        <b>Market Signal:</b> {signal} <br>
-        <b>Expected Move:</b> {'+' if signal == 'BUY' else '-'}{expected_move}% <br>
-        <b>Forecast Price:</b> ${forecast_price:,.2f} <br>
-        <b>Rationale:</b> {rationale} <br>
-        <b>Confidence:</b> {confidence}
+    <div style='padding:15px;border-radius:10px;background:{"#00ff00" if signal=="BUY" else "#ff0000"};color:black;font-size:20px;font-weight:bold;text-align:center;'>
+        Market Signal: {signal}
     </div>
     """, unsafe_allow_html=True)
+    st.write(reason)
+    st.write(forecast)
 else:
-    st.info("Insufficient data for prediction. Collecting more ticks...")
+    st.write("WAIT")
+    st.write("Insufficient data for prediction. Collecting more ticks...")
 
-# ---------------- AUTO REFRESH EVERY 5 SECONDS ----------------
+# -------------------- AUTO REFRESH EVERY 5 SECONDS --------------------
 st.caption("Refreshing every 5 seconds...")
-time.sleep(5)
-st.rerun()
+st_autorefresh(interval=5000, key="data_refresh")
