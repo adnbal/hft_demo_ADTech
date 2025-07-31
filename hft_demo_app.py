@@ -120,20 +120,35 @@ with left:
         st.session_state.show_modal = True
     st.markdown("</div>", unsafe_allow_html=True)
 
-# ---------- AI Modal ----------
+# ---------- AI Modal (Fixed) ----------
 if st.session_state.show_modal:
-    st.markdown("""
-    <div style='position:fixed;top:0;left:0;width:100%;height:100%;
-    background:rgba(0,0,0,0.7);display:flex;justify-content:center;align-items:center;
-    z-index:9999;'>
-        <div style='background:#1e1e1e;padding:20px;border-radius:10px;width:50%;color:white;'>
-    """, unsafe_allow_html=True)
-    st.write("### AI Market Forecast")
+    st.markdown(
+        """
+        <style>
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: center;
+            z-index: 9999;
+        }
+        .modal-box {
+            background-color: #1e1e1e; padding: 20px; border-radius: 10px; width: 50%;
+            color: white; text-align: left; box-shadow: 0 0 30px #39ff14;
+        }
+        </style>
+        <div class="modal-overlay">
+            <div class="modal-box">
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("### 🤖 AI Market Forecast")
     st.write(f"**Signal:** {ai_signal}")
     st.write(f"**Reason:** {ai_text}")
-    st.write("🔍 Based on last 10 price trends & momentum.")
+    st.write("📊 Based on last 10 price points & momentum analysis.")
+
     if st.button("Close"):
         st.session_state.show_modal = False
+
     st.markdown("</div></div>", unsafe_allow_html=True)
 
 # ---------- Main Panel ----------
