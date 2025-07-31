@@ -141,14 +141,7 @@ with left:
             margin-bottom: 15px;
             background: transparent;
             box-shadow: 0 0 15px {color}, 0 0 30px {color};
-            animation: pulse 1.5s infinite alternate;
         '>{ai_signal}</div>
-        <style>
-            @keyframes pulse {{
-                0% {{ box-shadow: 0 0 10px {color}, 0 0 20px {color}; }}
-                100% {{ box-shadow: 0 0 20px {color}, 0 0 40px {color}; }}
-            }}
-        </style>
     """, unsafe_allow_html=True)
 
     if st.button("🔍 Why this forecast?"):
@@ -201,6 +194,90 @@ with middle:
         st.dataframe(pd.DataFrame(st.session_state.trade_log))
     else:
         st.info("No trades yet.")
+
+    # ---------- Realized PnL ----------
+    pnl, cum_pnl, open_positions = [], 0, []
+    for trade in st.session_state.trade_log:
+        if trade["side"] == "BUY":
+            open_positions.append((trade["qty"], trade["price"]))
+            cum_pnl -= trade["qty"] * trade["price"]
+        else:
+            if open_positions:
+                qty_to_sell = trade["qty"]
+                while qty_to_sell > 0 and open_positions:
+                    qty_open, price_open = open_positions[0]
+                    if qty_open <= qty_to_sell:
+                        cum_pnl += qty_open * trade["price"]
+                        qty_to_sell -= qty_open
+                        open_positions.pop(0)
+                    else:
+                        cum_pnl += qty_to_sell * trade["price"]
+                        open_positions[0] = (qty_open - qty_to_sell, price_open)
+                        qty_to_sell = 0
+        pnl.append(cum_pnl)
+
+    st.markdown(f"""
+        <div style='text-align:center;font-size:30px;font-weight:bold;margin:20px;
+        padding:15px;border-radius:10px;background:#111;border:3px solid white;
+        color:#39ff14;'>💰 TOTAL PROFIT: {cum_pnl:.2f} USD</div>
+    """, unsafe_allow_html=True)
+
+    if pnl:
+        pnl_fig = go.Figure()
+        pnl_fig.add_trace(go.Scatter(x=[t["time"] for t in st.session_state.trade_log], y=pnl,
+                                     mode='lines', name='Realized PnL', line=dict(color='cyan')))
+        pnl_fig.update_layout(template="plotly_dark", title="📊 Realized PnL", height=300)
+        st.plotly_chart(pnl_fig, use_container_width=True)
+
+    # ---------- Unrealized PnL ----------
+    current_unrealized = 0
+    for pos in st.session_state.positions:
+        current_unrealized += (price - pos["price"]) * pos["qty"]
+    st.session_state.unrealized_history.append(current_unrealized)
+    st.session_state.unrealized_time.append(time.strftime('%H:%M:%S'))
+    unrealized_fig = go.Figure()
+    unrealized_fig.add_trace(go.Scatter(x=st.session_state.unrealized_time,
+                                        y=st.session_state.unrealized_history,
+                                        mode='lines+markers', name='Unrealized PnL',
+                                        line=dict(color='magenta')))
+    unrealized_fig.update_layout(template="plotly_dark", title="📊 Unrealized PnL (Open Positions)", height=300)
+    st.plotly_chart(unrealized_fig, use_container_width=True)
+
+    # ---------- Cumulative PnL (Last 5 Hours) ----------
+    now = datetime.now()
+    five_hours_ago = now - timedelta(hours=5)
+    trade_times, cumulative_pnl, cum_pnl_5h = [], [], 0
+    open_positions_5h = []
+    for trade in st.session_state.trade_log:
+        trade_time = datetime.strptime(trade["time"], "%H:%M:%S")
+        trade_time = datetime.combine(now.date(), trade_time.time())
+        if trade_time >= five_hours_ago:
+            if trade["side"] == "BUY":
+                open_positions_5h.append((trade["qty"], trade["price"]))
+                cum_pnl_5h -= trade["qty"] * trade["price"]
+            else:
+                if open_positions_5h:
+                    qty_to_sell = trade["qty"]
+                    while qty_to_sell > 0 and open_positions_5h:
+                        qty_open, price_open = open_positions_5h[0]
+                        if qty_open <= qty_to_sell:
+                            cum_pnl_5h += qty_open * trade["price"]
+                            qty_to_sell -= qty_open
+                            open_positions_5h.pop(0)
+                        else:
+                            cum_pnl_5h += qty_to_sell * trade["price"]
+                            open_positions_5h[0] = (qty_open - qty_to_sell, price_open)
+                            qty_to_sell = 0
+            trade_times.append(trade_time)
+            cumulative_pnl.append(cum_pnl_5h)
+
+    if trade_times:
+        cum_pnl_fig = go.Figure()
+        cum_pnl_fig.add_trace(go.Scatter(x=trade_times, y=cumulative_pnl,
+                                         mode='lines+markers', name='Cumulative PnL',
+                                         line=dict(color='orange')))
+        cum_pnl_fig.update_layout(template="plotly_dark", title="💰 Cumulative Profit (Last 5 Hours)", height=300)
+        st.plotly_chart(cum_pnl_fig, use_container_width=True)
 
 # ---------- Trading Panel ----------
 with right:
