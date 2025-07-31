@@ -8,7 +8,6 @@ import urllib.parse
 import plotly.graph_objects as go
 from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
-import json
 
 # ✅ Binance Testnet API Base
 BASE_URL = "https://testnet.binance.vision/api"
@@ -25,7 +24,7 @@ st_autorefresh(interval=refresh_interval * 1000, key="refresh")
 # ✅ Load Secrets
 API_KEY = st.secrets["binance"]["api_key"]
 API_SECRET = st.secrets["binance"]["api_secret"]
-AI_API_KEY = st.secrets.get("openai", {}).get("api_key", None)  # OpenAI/DeepSeek key optional
+AI_API_KEY = st.secrets.get("openai", {}).get("api_key", None)
 
 # ✅ Session State Initialization
 for key, value in {
@@ -73,7 +72,7 @@ def fetch_price(symbol="BTCUSDT"):
 
 def fetch_order_book(symbol="BTCUSDT"):
     try:
-        response = requests.get(f"{BASE_URL}/v3/depth", params={"symbol": symbol, "limit": 5}, timeout=3)
+        response = requests.get(f"{BASE_URL}/v3/depth", params={"symbol": symbol, "limit": 20}, timeout=3)
         if response.status_code == 200:
             data = response.json()
             bids = [(float(p), float(q)) for p, q in data["bids"]]
@@ -209,7 +208,7 @@ if AI_API_KEY:
 else:
     st.warning("No AI API key found. Add it in Streamlit secrets to enable AI recommendations.")
 
-# ✅ Display Charts & Panels
+# ✅ Layout: Price & Depth Chart
 col1, col2 = st.columns(2)
 with col1:
     st.subheader("📈 Live BTC/USDT Price")
@@ -219,14 +218,34 @@ with col1:
         st.plotly_chart(fig, use_container_width=True)
 
 with col2:
-    st.subheader("📊 Order Book Depth")
+    st.subheader("📊 Order Book Depth (Cumulative)")
     if bids and asks:
-        bid_prices, bid_qty = zip(*bids)
-        ask_prices, ask_qty = zip(*asks)
-        fig_ob = go.Figure()
-        fig_ob.add_trace(go.Bar(x=bid_prices, y=bid_qty, name="Bids", marker_color="green"))
-        fig_ob.add_trace(go.Bar(x=ask_prices, y=ask_qty, name="Asks", marker_color="red"))
-        st.plotly_chart(fig_ob, use_container_width=True)
+        bids_sorted = sorted(bids, key=lambda x: x[0], reverse=True)
+        asks_sorted = sorted(asks, key=lambda x: x[0])
+
+        # Cumulative sum for bids
+        bid_prices = [p for p, _ in bids_sorted]
+        bid_qty_cum = []
+        cum = 0
+        for _, q in bids_sorted:
+            cum += q
+            bid_qty_cum.append(cum)
+
+        # Cumulative sum for asks
+        ask_prices = [p for p, _ in asks_sorted]
+        ask_qty_cum = []
+        cum = 0
+        for _, q in asks_sorted:
+            cum += q
+            ask_qty_cum.append(cum)
+
+        fig_depth = go.Figure()
+        fig_depth.add_trace(go.Scatter(x=bid_prices, y=bid_qty_cum, mode='lines+markers', name='Bids', line=dict(color='green')))
+        fig_depth.add_trace(go.Scatter(x=ask_prices, y=ask_qty_cum, mode='lines+markers', name='Asks', line=dict(color='red')))
+        fig_depth.update_layout(title="Cumulative Depth", xaxis_title="Price (USDT)", yaxis_title="Cumulative Qty (BTC)", hovermode="x unified")
+        st.plotly_chart(fig_depth, use_container_width=True)
+    else:
+        st.info("Fetching order book...")
 
 # ✅ P&L Dashboard
 st.subheader("💹 P&L Dashboard")
