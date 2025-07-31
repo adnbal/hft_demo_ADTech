@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-import random
+import requests
 import time
 from datetime import datetime, timedelta
 from streamlit_autorefresh import st_autorefresh
@@ -58,51 +58,49 @@ if "positions" not in st.session_state:
 if "unrealized_history" not in st.session_state:
     st.session_state.unrealized_history = []
     st.session_state.unrealized_time = []
+if "show_modal" not in st.session_state:
+    st.session_state.show_modal = False
 
-# ---------- Mock Price Feed ----------
-def get_live_price():
-    base_price = 30000
-    return base_price + random.uniform(-200, 200)
+# ---------- Binance API ----------
+def get_binance_price(symbol="BTCUSDT"):
+    url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
+    response = requests.get(url)
+    data = response.json()
+    return float(data["price"])
 
-# ---------- Mock Ticker ----------
-assets = {
-    "BTC/USD": 30000 + random.uniform(-150, 150),
-    "ETH/USD": 2000 + random.uniform(-20, 20),
-    "AAPL": 180 + random.uniform(-2, 2),
-    "TSLA": 250 + random.uniform(-3, 3),
-    "AMZN": 135 + random.uniform(-1, 1)
-}
+# Get real-time main asset price (BTC/USDT)
+price = get_binance_price("BTCUSDT")
 
-# ---------- AI Signal ----------
+# ---------- Ticker Prices ----------
+assets = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "ADAUSDT", "XRPUSDT"]
+ticker_prices = {}
+for asset in assets:
+    ticker_prices[asset] = get_binance_price(asset)
+
+# ---------- AI Market Signal ----------
 def ai_market_signal():
     if len(st.session_state.price_data) < 10:
         return "HOLD", "Collecting more data for better prediction."
     prices = [p[1] for p in st.session_state.price_data[-10:]]
-    volumes = [p[2] for p in st.session_state.price_data[-10:]]
     trend = (prices[-1] - prices[0]) / prices[0]
-    avg_volume = sum(volumes) / len(volumes)
-    current_volume = volumes[-1]
     if trend > 0.002:
-        reason = "Price trend bullish with strong momentum."
-        if current_volume > avg_volume:
-            reason += " Volume above average, strong buying."
-        return "BUY", reason
+        return "BUY", "Bullish trend detected with upward momentum and positive market bias."
     elif trend < -0.002:
-        reason = "Downward trend detected."
-        if current_volume > avg_volume:
-            reason += " High volume selling pressure."
-        return "SELL", reason
+        return "SELL", "Bearish trend detected, possible downside risk."
     else:
-        return "HOLD", "Market neutral. No strong movement."
+        return "HOLD", "Market neutral, low conviction for trend direction."
 
 # ---------- Ticker Bar ----------
 ticker_html = "<div class='ticker-container'><div class='ticker-text'>"
-for asset, price in assets.items():
-    change = random.uniform(-1.5, 1.5)
+for asset, val in ticker_prices.items():
+    change = round(((val - price) / price) * 100, 2)
     color_class = "price-up" if change >= 0 else "price-down"
-    ticker_html += f"&nbsp;&nbsp;{asset}: <span class='{color_class}'>{price:.2f}</span> ({change:+.2f}%)&nbsp;&nbsp;|"
+    ticker_html += f"&nbsp;&nbsp;{asset}: <span class='{color_class}'>{val:.2f}</span> ({change:+.2f}%)&nbsp;&nbsp;|"
 ticker_html += "</div></div>"
 st.markdown(ticker_html, unsafe_allow_html=True)
+
+# ---------- Update Price History ----------
+st.session_state.price_data.append((time.strftime('%H:%M:%S'), price, random.randint(50, 200)))
 
 # ---------- Layout ----------
 left, middle, right = st.columns([1.5, 3, 1.5])
@@ -118,38 +116,49 @@ with left:
         background-color:{color};border-radius:10px;padding:12px;margin-bottom:15px;
         box-shadow:0 0 20px {color},0 0 40px {color};'>{ai_signal}</div>
     """, unsafe_allow_html=True)
-    st.markdown(f"<div style='font-size:18px;line-height:1.6;'>{ai_text}</div>", unsafe_allow_html=True)
+    if st.button("🔍 Why this forecast?"):
+        st.session_state.show_modal = True
     st.markdown("</div>", unsafe_allow_html=True)
+
+# ---------- Modal Popup ----------
+if st.session_state.show_modal:
+    modal_html = f"""
+    <div id="myModal" style="
+        position: fixed; z-index: 1000; left: 0; top: 0;
+        width: 100%; height: 100%; background-color: rgba(0,0,0,0.7);
+        display: flex; justify-content: center; align-items: center;">
+        <div style="
+            background-color: #1e1e1e; padding: 20px; border-radius: 10px;
+            width: 50%; max-width: 600px; color: white;
+            box-shadow: 0 0 30px #39ff14;">
+            <h2 style="color:#39ff14;">AI Market Forecast Details</h2>
+            <p><b>Signal:</b> {ai_signal}</p>
+            <p><b>Reason:</b> {ai_text}</p>
+            <p>🔍 Based on price momentum and last 10 interval trend analysis.</p>
+            <button onclick="document.getElementById('myModal').style.display='none';"
+                style="margin-top: 15px; background:#39ff14; color:black; padding:10px 20px; border:none; border-radius:5px; font-weight:bold;">
+                Close
+            </button>
+        </div>
+    </div>
+    """
+    st.markdown(modal_html, unsafe_allow_html=True)
 
 # ---------- Main Panel ----------
 with middle:
     st.markdown("<div class='panel'>", unsafe_allow_html=True)
-    st.markdown("<div class='neon'>⚡ High Frequency Trading Dashboard</div>", unsafe_allow_html=True)
+    st.markdown("<div class='neon'>⚡ Live Trading Dashboard</div>", unsafe_allow_html=True)
 
-    # Update Price Data
-    price = get_live_price()
-    st.session_state.price_data.append((time.strftime('%H:%M:%S'), price, random.randint(10, 100)))
     df = pd.DataFrame(st.session_state.price_data, columns=['time', 'price', 'volume'])
 
     # Price & Volume Chart
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=df['time'], y=df['price'], mode='lines+markers', name='Price', line=dict(color='lime')))
-    fig.add_trace(go.Bar(x=df['time'], y=df['volume'], name='Volume', yaxis='y2', marker=dict(color='blue')))
-    fig.update_layout(template="plotly_dark", xaxis=dict(title="Time"),
-                      yaxis=dict(title="Price"), yaxis2=dict(title="Volume", overlaying="y", side="right"), height=400)
+    fig.update_layout(template="plotly_dark", xaxis=dict(title="Time"), yaxis=dict(title="Price (USDT)"), height=400)
     st.plotly_chart(fig, use_container_width=True)
 
-    # Trade Log
-    st.subheader("📜 Trade Log")
-    if st.session_state.trade_log:
-        st.dataframe(pd.DataFrame(st.session_state.trade_log))
-    else:
-        st.info("No trades yet.")
-
-    # ---------- Realized PnL ----------
-    pnl = []
-    cum_pnl = 0
-    open_positions = []
+    # Total Profit & PnL
+    pnl, cum_pnl, open_positions = [], 0, []
     for trade in st.session_state.trade_log:
         if trade["side"] == "BUY":
             open_positions.append((trade["qty"], trade["price"]))
@@ -173,100 +182,22 @@ with middle:
         <div style='text-align:center;font-size:30px;font-weight:bold;margin:20px;
         padding:15px;border-radius:10px;background:#111;border:3px solid white;
         box-shadow:0 0 20px #39ff14,0 0 40px #39ff14;color:#39ff14;'>
-        💰 TOTAL PROFIT: {cum_pnl:.2f} USD
+        💰 TOTAL PROFIT: {cum_pnl:.2f} USDT
         </div>
     """, unsafe_allow_html=True)
-
-    if pnl:
-        pnl_fig = go.Figure()
-        pnl_fig.add_trace(go.Scatter(x=[t["time"] for t in st.session_state.trade_log], y=pnl,
-                                     mode='lines', name='Realized PnL', line=dict(color='cyan')))
-        pnl_fig.update_layout(template="plotly_dark", title="📊 Realized PnL", height=300)
-        st.plotly_chart(pnl_fig, use_container_width=True)
-
-    # ---------- Unrealized PnL ----------
-    current_unrealized = 0
-    if st.session_state.positions:
-        for pos in st.session_state.positions:
-            current_unrealized += (price - pos["price"]) * pos["qty"]
-    st.session_state.unrealized_history.append(current_unrealized)
-    st.session_state.unrealized_time.append(time.strftime('%H:%M:%S'))
-
-    # Alert color
-    unrealized_color = "#39ff14" if current_unrealized >= 0 else "#ff073a"
-    st.markdown(f"""
-        <div style='text-align:center;font-size:22px;font-weight:bold;margin:10px;
-        padding:10px;border-radius:8px;background:#111;border:2px solid {unrealized_color};
-        box-shadow:0 0 15px {unrealized_color};color:{unrealized_color};'>
-        Unrealized PnL: {current_unrealized:.2f} USD
-        </div>
-    """, unsafe_allow_html=True)
-
-    unrealized_fig = go.Figure()
-    unrealized_fig.add_trace(go.Scatter(x=st.session_state.unrealized_time,
-                                        y=st.session_state.unrealized_history,
-                                        mode='lines+markers', name='Unrealized PnL',
-                                        line=dict(color='magenta')))
-    unrealized_fig.update_layout(template="plotly_dark", title="📊 Unrealized PnL (Open Positions)", height=300)
-    st.plotly_chart(unrealized_fig, use_container_width=True)
-
-    # ---------- Cumulative PnL (Last 5 Hours) ----------
-    now = datetime.now()
-    five_hours_ago = now - timedelta(hours=5)
-    trade_times, cumulative_pnl, cum_pnl_5h = [], [], 0
-    open_positions_5h = []
-    for trade in st.session_state.trade_log:
-        trade_time = datetime.strptime(trade["time"], "%H:%M:%S")
-        trade_time = datetime.combine(now.date(), trade_time.time())
-        if trade_time >= five_hours_ago:
-            if trade["side"] == "BUY":
-                open_positions_5h.append((trade["qty"], trade["price"]))
-                cum_pnl_5h -= trade["qty"] * trade["price"]
-            else:
-                if open_positions_5h:
-                    qty_to_sell = trade["qty"]
-                    while qty_to_sell > 0 and open_positions_5h:
-                        qty_open, price_open = open_positions_5h[0]
-                        if qty_open <= qty_to_sell:
-                            cum_pnl_5h += qty_open * trade["price"]
-                            qty_to_sell -= qty_open
-                            open_positions_5h.pop(0)
-                        else:
-                            cum_pnl_5h += qty_to_sell * trade["price"]
-                            open_positions_5h[0] = (qty_open - qty_to_sell, price_open)
-                            qty_to_sell = 0
-            trade_times.append(trade_time)
-            cumulative_pnl.append(cum_pnl_5h)
-
-    if trade_times:
-        cum_pnl_fig = go.Figure()
-        cum_pnl_fig.add_trace(go.Scatter(x=trade_times, y=cumulative_pnl,
-                                         mode='lines+markers', name='Cumulative PnL',
-                                         line=dict(color='orange')))
-        cum_pnl_fig.update_layout(template="plotly_dark", title="💰 Cumulative Profit (Last 5 Hours)",
-                                   xaxis_title="Time", yaxis_title="PnL (USD)", height=300)
-        st.plotly_chart(cum_pnl_fig, use_container_width=True)
-
-    st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------- Trading Panel ----------
 with right:
     st.markdown("<div class='panel'>", unsafe_allow_html=True)
     st.markdown("<div class='neon'>🛠 Trading Panel</div>", unsafe_allow_html=True)
-    mode = st.radio("Mode", ["Simulation", "Live"])
     side = st.radio("Side", ["BUY", "SELL"])
-    qty = st.number_input("Quantity", min_value=1.0, step=1.0, value=1.0)
-    order_type = st.radio("Order Type", ["MARKET", "LIMIT"])
-    limit_price = st.number_input("Limit Price", value=30000.0, step=0.01)
-
+    qty = st.number_input("Quantity", min_value=0.001, step=0.001, value=0.001)
     if st.button("Submit Order"):
-        trade_price = price if order_type == "MARKET" else limit_price
-        st.session_state.trade_log.append({"time": time.strftime('%H:%M:%S'), "side": side, "qty": qty, "price": trade_price})
+        st.session_state.trade_log.append({"time": time.strftime('%H:%M:%S'), "side": side, "qty": qty, "price": price})
         if side == "BUY":
-            st.session_state.positions.append({"qty": qty, "price": trade_price})
+            st.session_state.positions.append({"qty": qty, "price": price})
         else:
             if st.session_state.positions:
                 st.session_state.positions.pop(0)
-        st.success(f"Order placed: {side} {qty} @ {trade_price}")
-
+        st.success(f"Order placed: {side} {qty} @ {price}")
     st.markdown("</div>", unsafe_allow_html=True)
