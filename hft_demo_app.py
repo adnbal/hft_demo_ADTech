@@ -111,63 +111,34 @@ if len(recent_prices) >= 10:
         reason = "Price trend is downward, indicating bearish momentum. Sellers dominate order flow."
         forecast = "Price likely to drop by ~0.7% in next few minutes due to negative trend."
 
-# -------------------- SIDEBAR: AI PANEL + TRADING PANEL --------------------
-st.sidebar.markdown("<h2>🤖 AI Market Intelligence</h2>", unsafe_allow_html=True)
-if signal == "BUY":
-    st.sidebar.markdown(f"<div class='neon-box'>{signal}</div>", unsafe_allow_html=True)
-elif signal == "SELL":
-    st.sidebar.markdown(f"<div class='neon-box neon-sell'>{signal}</div>", unsafe_allow_html=True)
-else:
-    st.sidebar.markdown(f"<div class='neon-box'>HOLD</div>", unsafe_allow_html=True)
+# -------------------- LEFT SIDEBAR: AI PANEL --------------------
+with st.sidebar:
+    st.markdown("<h2>🤖 AI Market Intelligence</h2>", unsafe_allow_html=True)
+    if signal == "BUY":
+        st.markdown(f"<div class='neon-box'>{signal}</div>", unsafe_allow_html=True)
+    elif signal == "SELL":
+        st.markdown(f"<div class='neon-box neon-sell'>{signal}</div>", unsafe_allow_html=True)
+    else:
+        st.markdown(f"<div class='neon-box'>HOLD</div>", unsafe_allow_html=True)
+    st.write(reason)
+    st.write(forecast)
 
-st.sidebar.write(reason)
-st.sidebar.write(forecast)
+# -------------------- MAIN LAYOUT WITH TWO COLUMNS --------------------
+col_left, col_main, col_right = st.columns([0.1, 1.5, 0.6])
 
-# Trading Panel
-st.sidebar.markdown("<h2>🛠 Trading Panel</h2>", unsafe_allow_html=True)
-mode = st.sidebar.radio("Mode", ["Simulation", "Live"])
-side = st.sidebar.radio("Side", ["BUY", "SELL"])
-qty = st.sidebar.number_input("Quantity", min_value=1, value=5)
-order_type = st.sidebar.radio("Order Type", ["MARKET", "LIMIT"])
-price_input = None
-if order_type == "LIMIT":
-    price_input = st.sidebar.number_input("Limit Price", min_value=10000, value=30000)
-if st.sidebar.button("Submit Order"):
-    trade_price = price_input if order_type == "LIMIT" else price
-    st.session_state.trade_log.append({
-        "time": datetime.now(),
-        "side": side,
-        "qty": qty,
-        "price": round(trade_price, 2)
-    })
+with col_main:
+    st.markdown("<h1 style='text-align:center;'>⚡ High Frequency Trading AI Dashboard</h1>", unsafe_allow_html=True)
 
-# BUY / SELL Buttons
-st.sidebar.markdown("<h3>Quick Actions</h3>", unsafe_allow_html=True)
-st.sidebar.button("BUY", key="buy_button", help="Quick BUY Order", on_click=lambda: st.session_state.trade_log.append({
-    "time": datetime.now(), "side": "BUY", "qty": 5, "price": round(price, 2)
-}), use_container_width=True)
-st.sidebar.button("SELL", key="sell_button", help="Quick SELL Order", on_click=lambda: st.session_state.trade_log.append({
-    "time": datetime.now(), "side": "SELL", "qty": 5, "price": round(price, 2)
-}), use_container_width=True)
-
-# -------------------- MAIN DASHBOARD --------------------
-st.markdown("<h1 style='text-align:center;'>⚡ High Frequency Trading AI Dashboard</h1>", unsafe_allow_html=True)
-
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    # Live BTC Price with Volume
+    # Live BTC Price & Volume Chart
     st.subheader("📈 Live BTC Price & Volume")
     df = pd.DataFrame(st.session_state.price_data[-100:])
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=df["time"], y=df["price"], mode="lines+markers", name="Price", line=dict(color="lime", width=3)))
     fig.add_trace(go.Bar(x=df["time"], y=df["volume"], name="Volume", marker_color="blue", opacity=0.3, yaxis="y2"))
-    fig.update_layout(
-        template="plotly_dark",
-        yaxis=dict(title="Price (USD)"),
-        yaxis2=dict(title="Volume", overlaying="y", side="right"),
-        height=400
-    )
+    fig.update_layout(template="plotly_dark",
+                      yaxis=dict(title="Price (USD)"),
+                      yaxis2=dict(title="Volume", overlaying="y", side="right"),
+                      height=400)
     st.plotly_chart(fig, use_container_width=True)
 
     # P&L Line Chart
@@ -178,7 +149,6 @@ with col1:
     fig_pnl.update_layout(template="plotly_dark", height=300)
     st.plotly_chart(fig_pnl, use_container_width=True)
 
-with col2:
     # Trade Log
     st.subheader("📜 Trade Log")
     trade_df = pd.DataFrame(st.session_state.trade_log)
@@ -193,3 +163,29 @@ with col2:
         "Metric": ["Open Position (BTC)", "Current Value (USD)", "Average Entry Price"],
         "Value": ["0", "$0.00", "$0.00"]
     }))
+
+# -------------------- RIGHT PANEL: TRADING PANEL --------------------
+with col_right:
+    st.markdown("<h2>🛠 Trading Panel</h2>", unsafe_allow_html=True)
+    mode = st.radio("Mode", ["Simulation", "Live"])
+    side = st.radio("Side", ["BUY", "SELL"])
+    qty = st.number_input("Quantity", min_value=1, value=5)
+    order_type = st.radio("Order Type", ["MARKET", "LIMIT"])
+    price_input = None
+    if order_type == "LIMIT":
+        price_input = st.number_input("Limit Price", min_value=10000, value=30000)
+
+    if st.button("Submit Order"):
+        trade_price = price_input if order_type == "LIMIT" else price
+        st.session_state.trade_log.append({
+            "time": datetime.now(),
+            "side": side,
+            "qty": qty,
+            "price": round(trade_price, 2)
+        })
+
+    st.markdown("### Quick Actions")
+    if st.button("BUY (Quick)", key="quick_buy"):
+        st.session_state.trade_log.append({"time": datetime.now(), "side": "BUY", "qty": 5, "price": round(price, 2)})
+    if st.button("SELL (Quick)", key="quick_sell"):
+        st.session_state.trade_log.append({"time": datetime.now(), "side": "SELL", "qty": 5, "price": round(price, 2)})
