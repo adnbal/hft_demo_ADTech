@@ -118,11 +118,30 @@ with left:
     st.markdown("<div class='neon'>🤖 AI Market Intelligence</div>", unsafe_allow_html=True)
     ai_signal, ai_text = ai_market_signal()
     color = "#39ff14" if ai_signal == "BUY" else "#ff073a" if ai_signal == "SELL" else "#ffff00"
+    
+    # ✅ Neon border only (no fill)
     st.markdown(f"""
-        <div style='text-align:center;font-size:24px;font-weight:bold;color:white;
-        background-color:{color};border-radius:10px;padding:12px;margin-bottom:15px;
-        box-shadow:0 0 20px {color},0 0 40px {color};'>{ai_signal}</div>
+        <div style='
+            text-align:center;
+            font-size:28px;
+            font-weight:bold;
+            color:{color};
+            border: 3px solid {color};
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 15px;
+            background: transparent;
+            box-shadow: 0 0 15px {color}, 0 0 30px {color};
+            animation: pulse 1.5s infinite alternate;
+        '>{ai_signal}</div>
+        <style>
+            @keyframes pulse {{
+                0% {{ box-shadow: 0 0 10px {color}, 0 0 20px {color}; }}
+                100% {{ box-shadow: 0 0 20px {color}, 0 0 40px {color}; }}
+            }}
+        </style>
     """, unsafe_allow_html=True)
+
     if st.button("🔍 Why this forecast?"):
         st.session_state.show_modal = True
     st.markdown("</div>", unsafe_allow_html=True)
