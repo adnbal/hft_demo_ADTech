@@ -57,7 +57,7 @@ if "unrealized_history" not in st.session_state:
 if "show_modal" not in st.session_state:
     st.session_state.show_modal = False
 
-# ---------- Cached API ----------
+# ---------- Cached CoinGecko API ----------
 @st.cache_data(ttl=60)
 def get_crypto_prices():
     url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,binancecoin,cardano,ripple&vs_currencies=usd"
@@ -120,17 +120,21 @@ with left:
         st.session_state.show_modal = True
     st.markdown("</div>", unsafe_allow_html=True)
 
+# ---------- AI Modal with Close Button ----------
 if st.session_state.show_modal:
-    st.markdown(f"""
-    <div style='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:flex;justify-content:center;align-items:center;'>
+    st.markdown("""
+    <div style='position:fixed;top:0;left:0;width:100%;height:100%;
+    background:rgba(0,0,0,0.7);display:flex;justify-content:center;align-items:center;
+    z-index:9999;'>
         <div style='background:#1e1e1e;padding:20px;border-radius:10px;width:50%;color:white;'>
-            <h3 style='color:#39ff14;'>AI Market Forecast</h3>
-            <p><b>Signal:</b> {ai_signal}</p>
-            <p><b>Reason:</b> {ai_text}</p>
-            <p>Based on last 10 price trends & momentum.</p>
-        </div>
-    </div>
     """, unsafe_allow_html=True)
+    st.write(f"### AI Market Forecast")
+    st.write(f"**Signal:** {ai_signal}")
+    st.write(f"**Reason:** {ai_text}")
+    st.write("🔍 Based on last 10 price trends & momentum.")
+    if st.button("Close"):
+        st.session_state.show_modal = False
+    st.markdown("</div></div>", unsafe_allow_html=True)
 
 # ---------- Main Panel ----------
 with middle:
@@ -139,6 +143,7 @@ with middle:
 
     df = pd.DataFrame(st.session_state.price_data, columns=['time', 'price', 'volume'])
 
+    # Price + Volume Chart
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=df['time'], y=df['price'], name="Price", mode='lines+markers', line=dict(color='lime')))
     fig.add_trace(go.Bar(x=df['time'], y=df['volume'], name="Volume", yaxis="y2", marker=dict(color='blue', opacity=0.5)))
