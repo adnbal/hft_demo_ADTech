@@ -80,18 +80,22 @@ ticker_prices = {
     "XRP": float(data.get("ripple", {}).get("usd", 0.7))
 }
 
-# ---------- AI Market Signal ----------
+# ---------- Improved AI Market Signal ----------
 def ai_market_signal():
     if len(st.session_state.price_data) < 10:
         return "HOLD", "Collecting more data for better prediction."
     prices = [p[1] for p in st.session_state.price_data[-10:]]
     trend = (prices[-1] - prices[0]) / prices[0]
-    if trend > 0.002:
-        return "BUY", "Bullish trend detected. Upward momentum strong."
-    elif trend < -0.002:
-        return "SELL", "Bearish trend detected. Downward momentum likely."
+    volatility = max(prices) - min(prices)
+
+    if trend > 0.0005:  # 0.05% change triggers BUY
+        reason = f"Uptrend of {trend*100:.3f}% with volatility ${volatility:.2f}."
+        return "BUY", f"Strong bullish momentum detected. {reason}"
+    elif trend < -0.0005:  # 0.05% down triggers SELL
+        reason = f"Downtrend of {trend*100:.3f}% with volatility ${volatility:.2f}."
+        return "SELL", f"Bearish trend likely. {reason}"
     else:
-        return "HOLD", "Market neutral. No strong signal."
+        return "HOLD", f"Price stable. Volatility ${volatility:.2f}. Waiting for a clear trend."
 
 # ---------- Ticker ----------
 ticker_html = "<div class='ticker-container'><div class='ticker-text'>"
@@ -104,6 +108,8 @@ st.markdown(ticker_html, unsafe_allow_html=True)
 
 # ---------- Price History ----------
 volume = random.randint(50, 500)
+# Add small randomness to make AI dynamic
+price += random.uniform(-5, 5)
 st.session_state.price_data.append((time.strftime('%H:%M:%S'), price, volume))
 
 # ---------- Layout ----------
@@ -120,7 +126,7 @@ with left:
         st.session_state.show_modal = True
     st.markdown("</div>", unsafe_allow_html=True)
 
-# ---------- AI Modal (Fully Fixed) ----------
+# ---------- AI Modal ----------
 if st.session_state.show_modal:
     st.markdown(
         """
@@ -146,7 +152,7 @@ if st.session_state.show_modal:
     st.markdown("### 🤖 AI Market Forecast")
     st.write(f"**Signal:** {ai_signal}")
     st.write(f"**Reason:** {ai_text}")
-    st.write("📊 Based on last 10 price points & momentum analysis.")
+    st.write("📊 Based on last 10 price points & volatility analysis.")
 
     if st.button("Close"):
         st.session_state.show_modal = False
