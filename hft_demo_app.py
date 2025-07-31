@@ -79,17 +79,16 @@ st.markdown(f"""
         box-shadow: 0 0 15px {color}, 0 0 30px {color};
         margin-bottom: 15px;
     }}
-    /* Left & Right Panels: Grey Background */
+    /* Panels */
     .side-panel {{
-        background-color: #1f2937;
+        background-color: #1f2937; /* Grey */
         border-radius: 12px;
         border: 2px solid white;
         padding: 20px;
         height: 100%;
     }}
-    /* Middle Panel: Black Background */
     .middle-panel {{
-        background-color: #0f172a;
+        background-color: #0f172a; /* Black */
         border-radius: 12px;
         border: 2px solid white;
         padding: 20px;
@@ -115,7 +114,6 @@ with col_main:
     st.markdown("<div class='middle-panel'>", unsafe_allow_html=True)
     st.markdown(f"<div class='neon-title'>⚡ High Frequency Trading Dashboard</div>", unsafe_allow_html=True)
 
-    # Price & Volume Chart
     df = pd.DataFrame(st.session_state.price_data[-50:])
     if not df.empty:
         fig = go.Figure()
@@ -129,5 +127,20 @@ with col_main:
                           height=400)
         st.plotly_chart(fig, use_container_width=True)
 
-    # P&L Line Chart
-   
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# ---- RIGHT TRADING PANEL ----
+with col_trade:
+    st.markdown("<div class='side-panel'>", unsafe_allow_html=True)
+    st.markdown(f"<div class='neon-title'>🛠 Trading Panel</div>", unsafe_allow_html=True)
+
+    # Trading Inputs
+    st.radio("Mode", ["Simulation", "Live"])
+    st.radio("Side", ["BUY", "SELL"])
+    qty = st.number_input("Quantity", min_value=1, value=1)
+    order_type = st.radio("Order Type", ["MARKET", "LIMIT"])
+    if order_type == "LIMIT":
+        st.number_input("Limit Price", min_value=1.0, value=30000.0, step=0.01)
+    st.button("Submit Order")
+
+    st.markdown("</div>", unsafe_allow_html=True)
