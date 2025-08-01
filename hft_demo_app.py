@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import random
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from streamlit_autorefresh import st_autorefresh
 
 # ---------- Page Config ----------
@@ -59,7 +59,10 @@ def get_live_price():
     return base_price + random.uniform(-200, 200)
 
 # ---------- Market Ticker ----------
-assets = {"BTC/USD": 30000 + random.uniform(-150, 150), "ETH/USD": 2000 + random.uniform(-20, 20)}
+assets = {"BTC/USD": 30000 + random.uniform(-150, 150),
+          "ETH/USD": 2000 + random.uniform(-20, 20),
+          "AAPL": 180 + random.uniform(-2, 2),
+          "TSLA": 250 + random.uniform(-3, 3)}
 ticker_html = "<div class='ticker-container'><div class='ticker-text'>"
 for asset, price_val in assets.items():
     change = random.uniform(-1.5, 1.5)
@@ -68,7 +71,7 @@ for asset, price_val in assets.items():
 ticker_html += "</div></div>"
 st.markdown(ticker_html, unsafe_allow_html=True)
 
-# ---------- AI Signal ----------
+# ---------- AI Market Signal ----------
 def ai_market_signal():
     if len(st.session_state.price_data) < 10:
         return "HOLD", "Collecting data for prediction.", None, 50, {}
@@ -87,16 +90,22 @@ def ai_market_signal():
         forecast_price = current_price * (1 + trend_strength)
         change_pct = ((forecast_price - current_price) / current_price) * 100
         reason = f"Price trend bullish. Target: ${forecast_price:.2f} ({change_pct:+.2f}%)."
-        metrics = {"Trend Strength": f"{trend_strength*100:.2f}%", "Volume Ratio": f"{volume_ratio:.2f}", "Forecast Change": f"{change_pct:+.2f}%"}
+        metrics = {"Trend Strength": f"{trend_strength*100:.2f}%",
+                   "Volume Ratio": f"{volume_ratio:.2f}",
+                   "Forecast Change": f"{change_pct:+.2f}%"}
         return "BUY", reason, forecast_price, confidence, metrics
     elif trend < -0.002:
         forecast_price = current_price * (1 - trend_strength)
         change_pct = ((forecast_price - current_price) / current_price) * 100
         reason = f"Downtrend detected. Target: ${forecast_price:.2f} ({change_pct:+.2f}%)."
-        metrics = {"Trend Strength": f"{trend_strength*100:.2f}%", "Volume Ratio": f"{volume_ratio:.2f}", "Forecast Change": f"{change_pct:+.2f}%"}
+        metrics = {"Trend Strength": f"{trend_strength*100:.2f}%",
+                   "Volume Ratio": f"{volume_ratio:.2f}",
+                   "Forecast Change": f"{change_pct:+.2f}%"}
         return "SELL", reason, forecast_price, confidence, metrics
     else:
-        metrics = {"Trend Strength": f"{trend_strength*100:.2f}%", "Volume Ratio": f"{volume_ratio:.2f}", "Forecast Change": "0.00%"}
+        metrics = {"Trend Strength": f"{trend_strength*100:.2f}%",
+                   "Volume Ratio": f"{volume_ratio:.2f}",
+                   "Forecast Change": "0.00%"}
         return "HOLD", "Market neutral. No strong movement.", current_price, confidence, metrics
 
 # ---------- Update Price Data ----------
@@ -109,8 +118,10 @@ candles = []
 for i in range(0, len(df), 3):
     subset = df.iloc[i:i+3]
     if len(subset) >= 3:
-        candles.append({"time": subset["time"].iloc[-1], "open": subset["price"].iloc[0],
-                        "high": subset["price"].max(), "low": subset["price"].min(),
+        candles.append({"time": subset["time"].iloc[-1],
+                        "open": subset["price"].iloc[0],
+                        "high": subset["price"].max(),
+                        "low": subset["price"].min(),
                         "close": subset["price"].iloc[-1]})
 candles_df = pd.DataFrame(candles)
 
@@ -155,7 +166,8 @@ with left:
         st.write(f"- Trend Strength: {metrics.get('Trend Strength', 'N/A')}")
         st.write(f"- Volume Ratio: {metrics.get('Volume Ratio', 'N/A')}")
         st.write(f"- Forecast Change: {metrics.get('Forecast Change', 'N/A')}")
-        st.write("**AI Strategy Suggestion:** Enter position as per signal. Monitor volatility. Risk: Trend reversal possible.")
+        st.write("**AI Strategy Suggestion:** Enter as per signal. Monitor volatility.")
+        st.write("**Risk Assessment:** Trend reversal possible under high volatility.")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -180,6 +192,45 @@ with middle:
     depth_fig.add_trace(go.Bar(x=['Ask'], y=[ask_size], name='Ask', marker=dict(color='red')))
     depth_fig.update_layout(template="plotly_dark", height=250, title="Market Depth")
     st.plotly_chart(depth_fig, use_container_width=True)
+
+    # PnL Analytics
+    pnl, cum_pnl, open_positions = [], 0, []
+    for trade in st.session_state.trade_log:
+        if trade["side"] == "BUY":
+            open_positions.append((trade["qty"], trade["price"]))
+            cum_pnl -= trade["qty"] * trade["price"]
+        else:
+            if open_positions:
+                qty_to_sell = trade["qty"]
+                while qty_to_sell > 0 and open_positions:
+                    qty_open, price_open = open_positions[0]
+                    if qty_open <= qty_to_sell:
+                        cum_pnl += qty_open * trade["price"]
+                        qty_to_sell -= qty_open
+                        open_positions.pop(0)
+                    else:
+                        cum_pnl += qty_to_sell * trade["price"]
+                        open_positions[0] = (qty_open - qty_to_sell, price_open)
+                        qty_to_sell = 0
+        pnl.append(cum_pnl)
+
+    st.markdown(f"<div style='text-align:center;font-size:30px;font-weight:bold;margin:20px;padding:15px;border-radius:10px;background:#111;border:3px solid white;color:#39ff14;'>💰 TOTAL PROFIT: {cum_pnl:.2f} USD</div>", unsafe_allow_html=True)
+
+    if pnl:
+        pnl_fig = go.Figure()
+        pnl_fig.add_trace(go.Scatter(x=[t["time"] for t in st.session_state.trade_log], y=pnl, mode='lines', name='Realized PnL', line=dict(color='cyan')))
+        pnl_fig.update_layout(template="plotly_dark", title="📊 Realized PnL", height=300)
+        st.plotly_chart(pnl_fig, use_container_width=True)
+
+    # Unrealized PnL
+    current_unrealized = sum((price - pos["price"]) * pos["qty"] for pos in st.session_state.positions)
+    st.session_state.unrealized_history.append(current_unrealized)
+    st.session_state.unrealized_time.append(time.strftime('%H:%M:%S'))
+    unrealized_fig = go.Figure()
+    unrealized_fig.add_trace(go.Scatter(x=st.session_state.unrealized_time, y=st.session_state.unrealized_history,
+                                        mode='lines+markers', name='Unrealized PnL', line=dict(color='magenta')))
+    unrealized_fig.update_layout(template="plotly_dark", title="📊 Unrealized PnL", height=300)
+    st.plotly_chart(unrealized_fig, use_container_width=True)
 
 # ---------- Trading Panel ----------
 with right:
