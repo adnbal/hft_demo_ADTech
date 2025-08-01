@@ -20,6 +20,12 @@ st.markdown("""
             background-color: #1e1e1e; border-radius: 10px;
             padding: 15px; border: 2px solid white; height: 100%;
         }
+        .neon-title {
+            font-size: 22px; text-align: center;
+            padding: 12px; border-radius: 8px;
+            font-weight: bold;
+            box-shadow: 0 0 15px #39ff14, 0 0 30px #39ff14;
+        }
         .ticker-container {
             width: 100%; overflow: hidden; white-space: nowrap;
             background-color: #1a1a1a; border-bottom: 2px solid #39ff14; padding: 8px 0;
@@ -137,12 +143,14 @@ left, middle, right = st.columns([1.5, 3, 1.5])
 # ---------- AI Panel ----------
 with left:
     st.markdown("<div class='panel'>", unsafe_allow_html=True)
-    st.markdown("<div style='font-size:22px;text-align:center;padding:12px;border:2px solid #00FFFF;'>🤖 AI Market Intelligence</div>", unsafe_allow_html=True)
+    st.markdown("<div class='neon-title'>🤖 AI Market Intelligence</div>", unsafe_allow_html=True)
 
     color = "#39ff14" if ai_signal == "BUY" else "#ff073a" if ai_signal == "SELL" else "#ffff00"
-    st.markdown(f"<div style='text-align:center;font-size:28px;color:{color};'>{ai_signal}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align:center;font-size:28px;color:{color};font-weight:bold;'>{ai_signal}</div>", unsafe_allow_html=True)
     st.write(f"**AI Suggestion:** {ai_text}")
-
+    if forecast_price:
+        st.write(f"**Forecast Price:** ${forecast_price:.2f}")
+    
     # Confidence Gauge
     gauge_fig = go.Figure(go.Indicator(
         mode="gauge+number", value=confidence,
@@ -163,18 +171,16 @@ with left:
         st.write(f"**Confidence:** {confidence}%")
         st.write(f"**Reasoning:** {ai_text}")
         st.write("**Detailed Breakdown:**")
-        st.write(f"- Trend Strength: {metrics.get('Trend Strength', 'N/A')}")
-        st.write(f"- Volume Ratio: {metrics.get('Volume Ratio', 'N/A')}")
-        st.write(f"- Forecast Change: {metrics.get('Forecast Change', 'N/A')}")
-        st.write("**AI Strategy Suggestion:** Enter as per signal. Monitor volatility.")
-        st.write("**Risk Assessment:** Trend reversal possible under high volatility.")
+        for k, v in metrics.items():
+            st.write(f"- {k}: {v}")
+        st.write("**AI Strategy:** Enter as per signal. Monitor volatility. Risk: Trend reversal possible.")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------- Middle Panel ----------
 with middle:
     st.markdown("<div class='panel'>", unsafe_allow_html=True)
-    st.markdown("### 📊 Market Visualization & PnL")
+    st.markdown("<div class='neon-title'>📊 Market Visualization & PnL</div>", unsafe_allow_html=True)
 
     # Candlestick Chart
     if not candles_df.empty:
@@ -185,12 +191,12 @@ with middle:
         candle_fig.update_layout(template="plotly_dark", height=400)
         st.plotly_chart(candle_fig, use_container_width=True)
 
-    # Market Depth
+    # Market Depth (Horizontal bars)
     bid_size, ask_size = random.randint(50, 200), random.randint(50, 200)
     depth_fig = go.Figure()
-    depth_fig.add_trace(go.Bar(x=['Bid'], y=[bid_size], name='Bid', marker=dict(color='green')))
-    depth_fig.add_trace(go.Bar(x=['Ask'], y=[ask_size], name='Ask', marker=dict(color='red')))
-    depth_fig.update_layout(template="plotly_dark", height=250, title="Market Depth")
+    depth_fig.add_trace(go.Bar(y=['Bid'], x=[bid_size], orientation='h', name='Bid', marker=dict(color='green')))
+    depth_fig.add_trace(go.Bar(y=['Ask'], x=[ask_size], orientation='h', name='Ask', marker=dict(color='red')))
+    depth_fig.update_layout(template="plotly_dark", height=250, title="Market Depth", barmode='overlay')
     st.plotly_chart(depth_fig, use_container_width=True)
 
     # PnL Analytics
@@ -214,7 +220,8 @@ with middle:
                         qty_to_sell = 0
         pnl.append(cum_pnl)
 
-    st.markdown(f"<div style='text-align:center;font-size:30px;font-weight:bold;margin:20px;padding:15px;border-radius:10px;background:#111;border:3px solid white;color:#39ff14;'>💰 TOTAL PROFIT: {cum_pnl:.2f} USD</div>", unsafe_allow_html=True)
+    pnl_color = "#39ff14" if cum_pnl >= 0 else "#ff073a"
+    st.markdown(f"<div style='text-align:center;font-size:30px;font-weight:bold;margin:20px;padding:15px;border-radius:10px;background:#111;border:3px solid {pnl_color};color:{pnl_color};'>💰 TOTAL PROFIT: {cum_pnl:.2f} USD</div>", unsafe_allow_html=True)
 
     if pnl:
         pnl_fig = go.Figure()
@@ -235,7 +242,7 @@ with middle:
 # ---------- Trading Panel ----------
 with right:
     st.markdown("<div class='panel'>", unsafe_allow_html=True)
-    st.markdown("### 🛠 Trading Panel")
+    st.markdown("<div class='neon-title'>🛠 Trading Panel</div>", unsafe_allow_html=True)
     mode = st.radio("Mode", ["Simulation", "Live"])
     side = st.radio("Side", ["BUY", "SELL"], index=0 if st.session_state.selected_side == "BUY" else 1)
     qty = st.number_input("Quantity", min_value=1.0, step=1.0, value=1.0)
